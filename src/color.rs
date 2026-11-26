@@ -55,16 +55,26 @@ impl Rgb {
         format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
     }
 
-    /// `rgb(r, g, b)`.
+    /// `rgb(r, g, b)`, for copying a CSS color value.
     pub fn to_rgb_string(self) -> String {
-        format!("rgb({}, {}, {})", self.r, self.g, self.b)
+        format!("rgb({})", self.to_rgb_values())
     }
 
-    /// `hsl(h, s%, l%)`.
+    /// Just the numbers, e.g. `59, 130, 246`, for display.
+    pub fn to_rgb_values(self) -> String {
+        format!("{}, {}, {}", self.r, self.g, self.b)
+    }
+
+    /// `hsl(h, s%, l%)`, for copying a CSS color value.
     pub fn to_hsl_string(self) -> String {
+        format!("hsl({})", self.to_hsl_values())
+    }
+
+    /// Just the numbers, e.g. `217, 91%, 60%`, for display.
+    pub fn to_hsl_values(self) -> String {
         let hsl = self.to_hsl();
         format!(
-            "hsl({}, {}%, {}%)",
+            "{}, {}%, {}%",
             (hsl.h.round() as u32) % 360,
             (hsl.s * 100.0).round() as u32,
             (hsl.l * 100.0).round() as u32
@@ -151,6 +161,7 @@ mod tests {
     #[test]
     fn rgb_format() {
         assert_eq!(Rgb::new(255, 0, 128).to_rgb_string(), "rgb(255, 0, 128)");
+        assert_eq!(Rgb::new(255, 0, 128).to_rgb_values(), "255, 0, 128");
     }
 
     #[test]
@@ -162,6 +173,7 @@ mod tests {
         assert_eq!(Rgb::new(0, 0, 0).to_hsl_string(), "hsl(0, 0%, 0%)");
         assert_eq!(Rgb::new(128, 128, 128).to_hsl_string(), "hsl(0, 0%, 50%)");
         assert_eq!(Rgb::new(255, 0, 128).to_hsl_string(), "hsl(330, 100%, 50%)");
+        assert_eq!(Rgb::new(255, 0, 128).to_hsl_values(), "330, 100%, 50%");
     }
 
     #[test]
