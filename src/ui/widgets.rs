@@ -183,50 +183,63 @@ impl Pill<'_> {
         response
     }
 
-    /// The current option with a chevron; clicking opens a menu of options.
-    /// Returns `true` when the user picked a different option.
-    pub fn dropdown<T: Copy + PartialEq>(
+    /// `‹ value ›`: the arrows step through `options` (wrapping around),
+    /// clicking the value or scrolling over it steps too. Used instead of
+    /// dropdown menus, which a window this short would cut off. Returns
+    /// `true` when the option changed.
+    pub fn stepper<T: Copy + PartialEq>(
         &mut self,
         current: &mut T,
         options: &[T],
         label: impl Fn(T) -> String,
         width: f32,
     ) -> bool {
-        let (rect, response) = segment_button(self.ui, width);
-        let chevron = Rect::from_center_size(
-            pos2(rect.right() - 6.0 - 7.0, rect.center().y),
-            Vec2::splat(14.0),
-        );
-        let color = if response.hovered() {
-            theme::TEXT
-        } else {
-            theme::TEXT_DIM
-        };
-        icons::paint(self.ui.painter(), chevron, Icon::ChevronDown, color);
+        let len = options.len();
+        if len == 0 {
+            return false;
+        }
+        let index = options.iter().position(|&o| o == *current).unwrap_or(0);
+        let mut step = 0i32;
+        if self.icon_button(Icon::ChevronLeft, "Previous").clicked() {
+            step = -1;
+        }
+        let value_w = (width - 2.0 * SEG_H).max(0.0);
+        let (rect, response) = segment_button(self.ui, value_w);
         let galley = fitted(
             self.ui,
             &label(*current),
             theme::bold(13.5),
             theme::TEXT,
-            chevron.left() - rect.left() - 16.0,
+            rect.width() - 12.0,
         );
-        let pos = pos2(rect.left() + 10.0, rect.center().y - galley.size().y / 2.0);
+        let pos = rect.center() - galley.size() / 2.0;
         self.ui.painter().galley(pos, galley, theme::TEXT);
-
-        let mut changed = false;
-        egui::Popup::menu(&response)
-            .width(width.max(150.0))
-            .show(|ui| {
-                for &option in options {
-                    if menu_row(ui, None, &label(option), option == *current).clicked()
-                        && option != *current
-                    {
-                        *current = option;
-                        changed = true;
-                    }
-                }
+        if response.clicked() {
+            step = 1;
+        }
+        if response.hovered() {
+            let scroll: f32 = self.ui.input(|i| {
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::MouseWheel { delta, .. } => Some(delta.y),
+                        _ => None,
+                    })
+                    .sum()
             });
-        changed
+            if scroll != 0.0 {
+                step = if scroll > 0.0 { -1 } else { 1 };
+            }
+        }
+        if self.icon_button(Icon::ChevronRight, "Next").clicked() {
+            step = 1;
+        }
+        if step == 0 || len < 2 {
+            return false;
+        }
+        let next = (index as i32 + step).rem_euclid(len as i32) as usize;
+        *current = options[next];
+        true
     }
 
     /// A slider over a color gradient. `color_at` gives the color for a

@@ -100,6 +100,23 @@ impl MainWindow {
         }
     }
 
+    /// Parks the window far off every monitor, so the frame eframe shows
+    /// before the app can hide it is never seen.
+    pub fn move_offscreen(self) {
+        // SAFETY: plain value arguments.
+        unsafe {
+            SetWindowPos(
+                self.hwnd(),
+                std::ptr::null_mut(),
+                -32000,
+                -32000,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
+    }
+
     /// Moves the window back inside its monitor's work area (not under the
     /// taskbar) if it sticks out, e.g. after growing for the Image tab.
     pub fn keep_on_screen(self) {

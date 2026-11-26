@@ -84,6 +84,7 @@ pub fn show(
             event = Some(GridEvent::Select(index));
         }
         response.context_menu(|ui| {
+            ui.set_max_width(200.0);
             if widgets::menu_row(
                 ui,
                 Some(Icon::Copy),

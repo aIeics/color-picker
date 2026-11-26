@@ -76,8 +76,8 @@ impl SampleSize {
     pub fn label(self) -> &'static str {
         match self {
             Self::One => "1 px",
-            Self::Three => "3×3 avg",
-            Self::Five => "5×5 avg",
+            Self::Three => "3×3",
+            Self::Five => "5×5",
         }
     }
 }

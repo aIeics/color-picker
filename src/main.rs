@@ -27,7 +27,6 @@ fn main() -> eframe::Result {
     let saved = store::load();
     // Launched by Windows at sign-in: start quietly in the tray.
     let startup = std::env::args().any(|arg| arg == platform::STARTUP_ARG);
-    let hidden = startup && saved.settings.tray != settings::TrayMode::Off;
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Color Picker")
@@ -36,7 +35,6 @@ fn main() -> eframe::Result {
         .with_resizable(false)
         .with_maximize_button(false)
         .with_decorations(false)
-        .with_visible(!hidden)
         .with_icon(egui::IconData {
             rgba: ui::app_icon::pixels(64),
             width: 64,

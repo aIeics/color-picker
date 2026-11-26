@@ -61,6 +61,8 @@ impl MainWindow {
     }
 
     pub fn keep_on_screen(self) {}
+
+    pub fn move_offscreen(self) {}
 }
 
 pub struct Service;

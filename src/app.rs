@@ -117,6 +117,11 @@ pub struct ColorPickerApp {
     /// The platform thread: hotkey, screen picking and tray. `None` where
     /// unsupported or if it failed to start.
     service: Option<Service>,
+    /// Started hidden in the tray: where the window goes when first shown.
+    restore_pos: Option<[i32; 2]>,
+    /// Frames left in which to hide the window (eframe shows it after its
+    /// first frame, whatever the viewport builder says).
+    hide_frames: u8,
 }
 
 impl ColorPickerApp {
@@ -142,12 +147,18 @@ impl ColorPickerApp {
         if let Some(service) = &service {
             service.send(Command::SetTray(settings.tray != TrayMode::Off));
         }
+        let (mut restore_pos, mut hide_frames) = (None, 0);
         if startup {
-            if settings.tray == TrayMode::Off {
+            if settings.tray == TrayMode::Off || service.is_none() {
+                // No tray to come back from: start minimized instead.
                 ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
-            } else if service.is_none() {
-                // No tray to come back from: never stay invisible.
-                ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+            } else {
+                if let Some(window) = window {
+                    restore_pos = window.position();
+                    window.move_offscreen();
+                }
+                hide_frames = 3;
+                ctx.request_repaint();
             }
         }
 
@@ -178,6 +189,8 @@ impl ColorPickerApp {
             palette_tab: palette::ui::PaletteTab::default(),
             settings_tab: settings::ui::SettingsTab::default(),
             service,
+            restore_pos,
+            hide_frames,
         }
     }
 
@@ -216,6 +229,10 @@ impl ColorPickerApp {
     }
 
     fn remember_position(&mut self) {
+        // Never shown since a hidden start: the window is parked off-screen.
+        if self.restore_pos.is_some() {
+            return;
+        }
         if self.settings.remember_position
             && let Some(pos) = self.window.and_then(MainWindow::position)
         {
@@ -405,6 +422,17 @@ impl ColorPickerApp {
         }
     }
 
+    /// Brings the window back: visible, not minimized, in front.
+    fn show_window(&mut self, ctx: &egui::Context) {
+        self.hide_frames = 0;
+        if let (Some(window), Some(pos)) = (self.window, self.restore_pos.take()) {
+            window.move_to(pos);
+        }
+        ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(ViewportCommand::Focus);
+    }
+
     fn handle_event(&mut self, ctx: &egui::Context, event: Event) {
         match event {
             Event::HotkeyStatus(error) => self.screen.hotkey_error = error,
@@ -419,7 +447,7 @@ impl ColorPickerApp {
                 self.applied.zoom = zoom;
                 self.mark_dirty();
             }
-            Event::ShowRequested => show_window(ctx),
+            Event::ShowRequested => self.show_window(ctx),
             Event::ExitRequested => {
                 self.quitting = true;
                 ctx.send_viewport_cmd(ViewportCommand::Close);
@@ -512,17 +540,15 @@ impl ColorPickerApp {
     }
 }
 
-/// Brings the window back: visible, not minimized, in front.
-fn show_window(ctx: &egui::Context) {
-    ctx.send_viewport_cmd(ViewportCommand::Visible(true));
-    ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
-    ctx.send_viewport_cmd(ViewportCommand::Focus);
-}
-
 impl eframe::App for ColorPickerApp {
     /// Runs before every frame and also while the window is hidden, so
     /// hotkey picks and tray clicks work without the window.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.hide_frames > 0 {
+            self.hide_frames -= 1;
+            ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+            ctx.request_repaint();
+        }
         while let Some(event) = self.service.as_ref().and_then(Service::poll) {
             self.handle_event(ctx, event);
         }

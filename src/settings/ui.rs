@@ -77,7 +77,7 @@ pub fn show(
             p.label("Tray", 52.0);
             p.divider();
             let width = p.remaining();
-            changed |= p.dropdown(
+            changed |= p.stepper(
                 &mut settings.tray,
                 &TrayMode::ALL,
                 |m| m.label().into(),
@@ -90,19 +90,36 @@ pub fn show(
         widgets::pill(ui, column, |p| {
             p.label("Sample", 70.0);
             p.divider();
-            let width = p.remaining();
-            changed |= p.dropdown(
-                &mut settings.sample,
-                &SampleSize::ALL,
-                |s| s.label().into(),
-                width,
-            );
+            let chip = p.remaining() / SampleSize::ALL.len() as f32;
+            for size in SampleSize::ALL {
+                let tip = match size {
+                    SampleSize::One => "The pixel under the cursor".to_owned(),
+                    _ => format!("The average of {} pixels", size.label()),
+                };
+                if p.chip(size.label(), settings.sample == size, chip)
+                    .on_hover_text(tip)
+                    .clicked()
+                    && settings.sample != size
+                {
+                    settings.sample = size;
+                    changed = true;
+                }
+            }
         });
         widgets::pill(ui, column, |p| {
-            p.label("Loupe zoom", 94.0);
+            p.label("Zoom", 58.0);
             p.divider();
-            let width = p.remaining();
-            changed |= p.dropdown(&mut settings.zoom, &ZOOM_LEVELS, |z| format!("{z}×"), width);
+            let chip = p.remaining() / ZOOM_LEVELS.len() as f32;
+            for zoom in ZOOM_LEVELS {
+                if p.chip(&format!("{zoom}×"), settings.zoom == zoom, chip)
+                    .on_hover_text("Loupe zoom (the mouse wheel changes it while picking)")
+                    .clicked()
+                    && settings.zoom != zoom
+                {
+                    settings.zoom = zoom;
+                    changed = true;
+                }
+            }
         });
         widgets::pill(ui, column, |p| {
             p.label("Copy on pick", 100.0);
@@ -110,7 +127,7 @@ pub fn show(
             let options: Vec<Option<Format>> =
                 std::iter::once(None).chain(Format::ALL.map(Some)).collect();
             let width = p.remaining();
-            changed |= p.dropdown(
+            changed |= p.stepper(
                 &mut settings.copy_on_pick,
                 &options,
                 |f| f.map_or("Off", Format::label).into(),
@@ -124,7 +141,7 @@ pub fn show(
             p.label("HEX style", 82.0);
             p.divider();
             let width = p.remaining();
-            changed |= p.dropdown(
+            changed |= p.stepper(
                 &mut settings.hex,
                 &HexStyle::ALL,
                 |s| s.label().into(),
@@ -186,7 +203,7 @@ fn record(ui: &Ui, tab: &mut SettingsTab, settings: &mut Settings, actions: &mut
                 repeat: false,
                 modifiers,
                 ..
-            } => Some((*key, *modifiers)),
+            } if !is_modifier(*key) => Some((*key, *modifiers)),
             _ => None,
         })
     });
@@ -215,4 +232,20 @@ fn record(ui: &Ui, tab: &mut SettingsTab, settings: &mut Settings, actions: &mut
             "Hold Ctrl, Alt, Shift or Win with a key (F-keys work alone)".into(),
         ));
     }
+}
+
+/// Ctrl, Shift, Alt and Win arrive as key presses of their own; a hotkey
+/// is recorded at the key pressed with them.
+fn is_modifier(key: Key) -> bool {
+    matches!(
+        key,
+        Key::ShiftLeft
+            | Key::ShiftRight
+            | Key::ControlLeft
+            | Key::ControlRight
+            | Key::AltLeft
+            | Key::AltRight
+            | Key::SuperLeft
+            | Key::SuperRight
+    )
 }

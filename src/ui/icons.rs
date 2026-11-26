@@ -18,7 +18,8 @@ pub enum Icon {
     Copy,
     Keyboard,
     Clear,
-    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     Folder,
     Paste,
     Plus,
@@ -125,7 +126,8 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             }
             pen.line(&[(8.0, 14.0), (16.0, 14.0)]);
         }
-        Icon::ChevronDown => pen.line(&[(6.5, 9.5), (12.0, 15.0), (17.5, 9.5)]),
+        Icon::ChevronLeft => pen.line(&[(14.5, 6.5), (9.0, 12.0), (14.5, 17.5)]),
+        Icon::ChevronRight => pen.line(&[(9.5, 6.5), (15.0, 12.0), (9.5, 17.5)]),
         Icon::Folder => pen.closed(&[
             (3.0, 6.0),
             (9.5, 6.0),
