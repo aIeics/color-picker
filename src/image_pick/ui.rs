@@ -87,6 +87,7 @@ fn toolbar(ui: &mut Ui, tab: &mut ImageTab, hex: HexStyle, window: Option<MainWi
                 let center = tab.canvas / 2.0;
                 if p.icon_button(Icon::Minus, "Zoom out").clicked() {
                     tab.view = tab.view.zoom_at(center, 0.8);
+                    tab.auto_fit = false;
                 }
                 let percent = tab.view.zoom * p.ui.ctx().pixels_per_point() * 100.0;
                 let text = if !has_image {
@@ -99,6 +100,7 @@ fn toolbar(ui: &mut Ui, tab: &mut ImageTab, hex: HexStyle, window: Option<MainWi
                 p.value(&text, theme::TEXT, 64.0);
                 if p.icon_button(Icon::Plus, "Zoom in").clicked() {
                     tab.view = tab.view.zoom_at(center, 1.25);
+                    tab.auto_fit = false;
                 }
                 p.divider();
                 if p.button(Some(Icon::Fit), "Fit", fit_w)
@@ -106,6 +108,7 @@ fn toolbar(ui: &mut Ui, tab: &mut ImageTab, hex: HexStyle, window: Option<MainWi
                     .clicked()
                 {
                     tab.needs_fit = true;
+                    tab.auto_fit = true;
                 }
             });
         });
@@ -149,6 +152,7 @@ fn canvas(
     let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
     widgets::paint_pill(ui.painter(), rect);
     let inner = rect.shrink(1.0);
+    let resized = (tab.canvas - inner.size()).length() > 0.5;
     tab.canvas = inner.size();
     let painter = ui.painter_at(inner);
 
@@ -187,7 +191,7 @@ fn canvas(
 
     let image_size = vec2(shown.pixels.width() as f32, shown.pixels.height() as f32);
     let pixel_count = [shown.pixels.width(), shown.pixels.height()];
-    if tab.needs_fit {
+    if tab.needs_fit || (tab.auto_fit && resized) {
         tab.view = View::fit(image_size, inner.size());
         tab.needs_fit = false;
     }
@@ -198,10 +202,12 @@ fn canvas(
         let factor = (scroll * 0.004).exp() * pinch;
         if (factor - 1.0).abs() > 1e-4 {
             tab.view = tab.view.zoom_at(pointer - inner.min, factor);
+            tab.auto_fit = false;
         }
     }
     if response.dragged_by(PointerButton::Primary) || response.dragged_by(PointerButton::Middle) {
         tab.view.offset += response.drag_delta();
+        tab.auto_fit = false;
     }
     tab.view = tab.view.clamp_to(image_size, inner.size(), 24.0);
     let view = tab.view;

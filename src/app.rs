@@ -153,8 +153,8 @@ impl ColorPickerApp {
 
         let autostart = platform::autostart_enabled();
         if autostart {
-            // Keeps the entry pointing at this .exe if it was moved.
-            let _ = platform::set_autostart(true);
+            // Repoints the entry at this .exe only if its target is gone.
+            platform::repair_autostart();
         }
 
         Self {
@@ -465,6 +465,9 @@ impl ColorPickerApp {
         } else if self.image.paste_timed_out() {
             self.toast("No image on the clipboard");
         }
+        if self.image.waiting_for_paste() {
+            ctx.request_repaint();
+        }
     }
 
     fn body(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -576,7 +579,10 @@ impl eframe::App for ColorPickerApp {
         let top = bar.bottom() + MARGIN;
         let body_rect = Rect::from_min_max(
             pos2(full.left() + MARGIN, top),
-            pos2(full.right() - MARGIN, full.bottom().max(top + 1.0)),
+            pos2(
+                full.right() - MARGIN,
+                (full.bottom() - MARGIN).max(top + 1.0),
+            ),
         );
         let mut body = ui.new_child(
             UiBuilder::new()

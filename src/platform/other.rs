@@ -24,6 +24,8 @@ pub fn autostart_enabled() -> bool {
     false
 }
 
+pub fn repair_autostart() {}
+
 pub fn set_autostart(_enabled: bool) -> Result<(), String> {
     Err("Only available on Windows".to_owned())
 }

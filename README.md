@@ -65,4 +65,4 @@ cargo test
 
 ## Notes
 
-The UI uses the bundled Manrope font (license in `assets/fonts/Manrope-OFL.txt`). The icons are drawn in code. Screen picking, the tray and the Open dialog use the Windows API. On other systems the app builds, but those features are unavailable.
+The UI uses the bundled Manrope font (license in `assets/fonts/Manrope-OFL.txt`). The icons are drawn in code. The app targets Windows: screen picking, the tray and the Open dialog use the Windows API. Other systems get stubs for those, which haven't been built or tested.

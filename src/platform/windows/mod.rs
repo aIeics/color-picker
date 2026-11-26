@@ -9,7 +9,9 @@ mod service;
 mod tray;
 mod window;
 
-pub use autostart::{STARTUP_ARG, is_enabled as autostart_enabled, set as set_autostart};
+pub use autostart::{
+    STARTUP_ARG, is_enabled as autostart_enabled, repair as repair_autostart, set as set_autostart,
+};
 pub use dialog::open_image_dialog;
 pub use instance::{is_first_instance, wake_first_instance};
 pub use service::Service;

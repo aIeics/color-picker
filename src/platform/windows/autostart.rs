@@ -31,8 +31,49 @@ pub fn is_enabled() -> bool {
     }
 }
 
-/// Adds or removes the `Run` entry. Adding also refreshes the path, so the
-/// entry follows the .exe if it was moved.
+/// Points the entry at this .exe if the one it names no longer exists
+/// (the app was moved). A debug build or a second copy elsewhere never
+/// takes over a working entry.
+pub fn repair() {
+    let target = stored_command().and_then(|command| {
+        let path = command
+            .trim()
+            .strip_prefix('"')?
+            .split('"')
+            .next()?
+            .to_owned();
+        Some(std::path::PathBuf::from(path))
+    });
+    if target.is_none_or(|path| !path.is_file()) {
+        let _ = set(true);
+    }
+}
+
+/// The `Run` entry's command line, if there is one.
+fn stored_command() -> Option<String> {
+    let (key, value) = (wide(RUN_KEY), wide(VALUE));
+    let mut buffer = vec![0u16; 1024];
+    let mut size = (buffer.len() * 2) as u32;
+    // SAFETY: the buffer and its size in bytes are passed together.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_SZ,
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr().cast(),
+            &mut size,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return None;
+    }
+    let len = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+    Some(String::from_utf16_lossy(&buffer[..len]))
+}
+
+/// Adds (pointing at this .exe) or removes the `Run` entry.
 pub fn set(enabled: bool) -> Result<(), String> {
     let (key, value) = (wide(RUN_KEY), wide(VALUE));
     let status = if enabled {

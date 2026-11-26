@@ -24,8 +24,11 @@ use crate::platform::{self, MainWindow};
 pub struct ImageTab {
     shown: Option<Shown>,
     view: View,
-    /// Fit the image to the canvas on the next frame (new image).
+    /// Fit the image to the canvas on the next frame (new image, Fit).
     needs_fit: bool,
+    /// Keep fitting while the canvas changes size (the window growing for
+    /// this tab), until the user zooms or pans.
+    auto_fit: bool,
     loading: Option<(String, Receiver<Result<Picture, String>>)>,
     dialog: Option<Receiver<Option<PathBuf>>>,
     error: Option<String>,
@@ -96,6 +99,10 @@ impl ImageTab {
         self.awaiting_paste = 0;
     }
 
+    pub fn waiting_for_paste(&self) -> bool {
+        self.awaiting_paste > 0
+    }
+
     /// Picks up dialog results and finished decodes.
     pub fn poll(&mut self, ctx: &egui::Context) {
         if let Some(dialog) = &self.dialog {
@@ -135,6 +142,7 @@ impl ImageTab {
             texture,
         });
         self.needs_fit = true;
+        self.auto_fit = true;
         self.error = None;
         self.hover = None;
     }
