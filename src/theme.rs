@@ -15,7 +15,7 @@ pub const BORDER: Color32 = Color32::from_rgb(46, 46, 46);
 pub const TEXT: Color32 = Color32::WHITE;
 pub const TEXT_DIM: Color32 = Color32::from_rgb(140, 140, 140);
 
-const RADIUS: u8 = 10;
+const RADIUS: u8 = 9;
 
 /// Content never gets wider than this, so wide windows keep a centred column.
 pub const MAX_WIDTH: f32 = 560.0;
@@ -47,16 +47,16 @@ pub fn apply(ctx: &egui::Context) {
         style.animation_time = 0.18;
 
         let spacing = &mut style.spacing;
-        spacing.item_spacing = Vec2::new(8.0, 8.0);
-        spacing.button_padding = Vec2::new(12.0, 6.0);
-        spacing.interact_size.y = 30.0;
+        spacing.item_spacing = Vec2::new(7.0, 7.0);
+        spacing.button_padding = Vec2::new(10.0, 6.0);
+        spacing.interact_size.y = 28.0;
         spacing.combo_width = 90.0;
 
         let text = &mut style.text_styles;
-        text.insert(egui::TextStyle::Heading, bold(20.0));
-        text.insert(egui::TextStyle::Body, FontId::proportional(14.0));
-        text.insert(egui::TextStyle::Button, FontId::proportional(14.0));
-        text.insert(egui::TextStyle::Small, FontId::proportional(12.0));
+        text.insert(egui::TextStyle::Heading, bold(18.0));
+        text.insert(egui::TextStyle::Body, FontId::proportional(13.0));
+        text.insert(egui::TextStyle::Button, FontId::proportional(13.0));
+        text.insert(egui::TextStyle::Small, FontId::proportional(11.0));
 
         let visuals = &mut style.visuals;
         visuals.dark_mode = true;
@@ -155,17 +155,17 @@ pub fn card() -> egui::Frame {
     egui::Frame::new()
         .fill(SURFACE)
         .stroke(Stroke::new(1.0, BORDER))
-        .corner_radius(16)
-        .inner_margin(Margin::same(16))
+        .corner_radius(14)
+        .inner_margin(Margin::same(14))
 }
 
 /// Small, dimmed, upper-case label above a group of controls.
 pub fn section_label(ui: &mut Ui, text: &str) {
     ui.label(
         egui::RichText::new(text.to_uppercase())
-            .size(11.0)
+            .size(10.0)
             .color(TEXT_DIM)
-            .extra_letter_spacing(1.2),
+            .extra_letter_spacing(1.0),
     );
 }
 
@@ -179,11 +179,11 @@ pub enum Kind {
 
 /// A rounded button with hover and press feedback, at least `min_width` wide.
 pub fn button_sized(ui: &mut Ui, text: &str, kind: Kind, min_width: f32) -> Response {
-    let font = FontId::proportional(14.0);
+    let font = FontId::proportional(13.0);
     let galley = ui
         .painter()
         .layout_no_wrap(text.to_string(), font, Color32::PLACEHOLDER);
-    let size = Vec2::new((galley.size().x + 28.0).max(min_width), 34.0);
+    let size = Vec2::new((galley.size().x + 24.0).max(min_width), 30.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
 
     if ui.is_rect_visible(rect) {
@@ -229,10 +229,10 @@ pub fn button_sized(ui: &mut Ui, text: &str, kind: Kind, min_width: f32) -> Resp
 /// A text field with the app's styling.
 pub fn text_field(ui: &mut Ui, text: &mut String, hint: &str, width: f32) -> Response {
     ui.add_sized(
-        [width, 30.0],
+        [width, 28.0],
         egui::TextEdit::singleline(text)
             .hint_text(egui::RichText::new(hint).color(TEXT_DIM.gamma_multiply(0.7)))
             .desired_width(width)
-            .margin(Margin::symmetric(10, 7)),
+            .margin(Margin::symmetric(9, 6)),
     )
 }

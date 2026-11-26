@@ -72,33 +72,35 @@ impl ColorPickerApp {
 
     fn swatch(&self, ui: &mut egui::Ui) {
         theme::section_label(ui, "Preview");
-        theme::card().show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            let (rect, _) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), 100.0),
-                egui::Sense::hover(),
-            );
-            ui.painter().rect_filled(rect, 12.0, self.color);
+        theme::card()
+            .inner_margin(egui::Margin::symmetric(10, 6))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let (rect, _) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), 56.0),
+                    egui::Sense::hover(),
+                );
+                ui.painter().rect_filled(rect, 9.0, self.color);
 
-            let text_color = if self.color.luminance() > 0.5 {
-                egui::Color32::BLACK
-            } else {
-                egui::Color32::WHITE
-            };
-            ui.painter().text(
-                rect.center(),
-                egui::Align2::CENTER_CENTER,
-                self.color.to_hex(),
-                theme::bold(24.0),
-                text_color,
-            );
-        });
+                let text_color = if self.color.luminance() > 0.5 {
+                    egui::Color32::BLACK
+                } else {
+                    egui::Color32::WHITE
+                };
+                ui.painter().text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    self.color.to_hex(),
+                    theme::bold(20.0),
+                    text_color,
+                );
+            });
     }
 
     fn pick_controls(&mut self, ui: &mut egui::Ui) {
         theme::section_label(ui, "Pick");
         theme::card()
-            .inner_margin(egui::Margin::symmetric(14, 12))
+            .inner_margin(egui::Margin::symmetric(10, 6))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
 
@@ -114,22 +116,22 @@ impl ColorPickerApp {
                             if picking {
                                 ui.disable();
                             }
-                            theme::button_sized(ui, "Pick from screen", Kind::Primary, 148.0)
+                            theme::button_sized(ui, "Pick from screen", Kind::Primary, 134.0)
                         })
                         .inner;
                     if !picking && pick.clicked() {
                         self.start_pick();
                     }
-                    if picking && theme::button_sized(ui, "Cancel", Kind::Ghost, 84.0).clicked() {
+                    if picking && theme::button_sized(ui, "Cancel", Kind::Ghost, 76.0).clicked() {
                         self.cancel_pick();
                     }
                 });
 
                 if picking {
-                    ui.add_space(4.0);
+                    ui.add_space(3.0);
                     ui.label(
                         egui::RichText::new("Move the cursor over the color to pick.")
-                            .size(12.0)
+                            .size(11.0)
                             .color(theme::TEXT_DIM),
                     );
                 }
@@ -139,22 +141,26 @@ impl ColorPickerApp {
     fn formats(&mut self, ui: &mut egui::Ui) {
         theme::section_label(ui, "Formats");
         theme::card()
-            .inner_margin(egui::Margin::symmetric(14, 12))
+            .inner_margin(egui::Margin::symmetric(10, 6))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
 
-                let label_width = 44.0;
-                let button_width = 64.0;
+                let label_width = 48.0;
+                let button_width = 60.0;
+                let row_height = 26.0;
                 let gap = ui.spacing().item_spacing.x;
                 let value_width =
                     (ui.available_width() - label_width - button_width - 2.0 * gap).max(80.0);
 
-                let rgb = self.color.to_rgb_string();
-                let hsl = self.color.to_hsl_string();
+                // Show only the numbers; copy the full CSS color values.
+                let rgb_values = self.color.to_rgb_values();
+                let hsl_values = self.color.to_hsl_values();
+                let rgb_copy = self.color.to_rgb_string();
+                let hsl_copy = self.color.to_hsl_string();
 
                 ui.horizontal(|ui| {
                     ui.add_sized(
-                        [label_width, 30.0],
+                        [label_width, row_height],
                         egui::Label::new(egui::RichText::new("HEX").color(theme::TEXT_DIM))
                             .truncate(),
                     );
@@ -179,32 +185,34 @@ impl ColorPickerApp {
                 });
                 ui.horizontal(|ui| {
                     ui.add_sized(
-                        [label_width, 30.0],
+                        [label_width, row_height],
                         egui::Label::new(egui::RichText::new("RGB").color(theme::TEXT_DIM))
                             .truncate(),
                     );
                     ui.add_sized(
-                        [value_width, 30.0],
-                        egui::Label::new(egui::RichText::new(&rgb).color(theme::TEXT)).truncate(),
+                        [value_width, row_height],
+                        egui::Label::new(egui::RichText::new(&rgb_values).color(theme::TEXT))
+                            .truncate(),
                     );
                     if theme::button_sized(ui, "Copy", Kind::Ghost, button_width).clicked() {
-                        ui.ctx().copy_text(rgb.clone());
-                        self.status = format!("Copied {rgb}.");
+                        ui.ctx().copy_text(rgb_copy.clone());
+                        self.status = format!("Copied {rgb_copy}.");
                     }
                 });
                 ui.horizontal(|ui| {
                     ui.add_sized(
-                        [label_width, 30.0],
+                        [label_width, row_height],
                         egui::Label::new(egui::RichText::new("HSL").color(theme::TEXT_DIM))
                             .truncate(),
                     );
                     ui.add_sized(
-                        [value_width, 30.0],
-                        egui::Label::new(egui::RichText::new(&hsl).color(theme::TEXT)).truncate(),
+                        [value_width, row_height],
+                        egui::Label::new(egui::RichText::new(&hsl_values).color(theme::TEXT))
+                            .truncate(),
                     );
                     if theme::button_sized(ui, "Copy", Kind::Ghost, button_width).clicked() {
-                        ui.ctx().copy_text(hsl.clone());
-                        self.status = format!("Copied {hsl}.");
+                        ui.ctx().copy_text(hsl_copy.clone());
+                        self.status = format!("Copied {hsl_copy}.");
                     }
                 });
             });
@@ -219,31 +227,27 @@ impl eframe::App for ColorPickerApp {
             .frame(
                 egui::Frame::NONE
                     .fill(theme::BG)
-                    .inner_margin(egui::Margin::symmetric(16, 10)),
+                    .inner_margin(egui::Margin::symmetric(14, 6)),
             )
             .show(ui, |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink(false)
-                    .show(ui, |ui| {
-                        theme::column(ui, theme::MAX_WIDTH, |ui| {
-                            ui.heading("Color Picker");
-                            ui.add_space(10.0);
+                theme::column(ui, theme::MAX_WIDTH, |ui| {
+                    ui.heading("Color Picker");
+                    ui.add_space(3.0);
 
-                            self.swatch(ui);
-                            ui.add_space(12.0);
-                            self.pick_controls(ui);
-                            ui.add_space(12.0);
-                            self.formats(ui);
-                            ui.add_space(8.0);
+                    self.swatch(ui);
+                    ui.add_space(6.0);
+                    self.pick_controls(ui);
+                    ui.add_space(6.0);
+                    self.formats(ui);
+                    ui.add_space(3.0);
 
-                            ui.label(
-                                egui::RichText::new(&self.status)
-                                    .size(12.0)
-                                    .color(theme::TEXT_DIM),
-                            );
-                            ui.add_space(4.0);
-                        });
-                    });
+                    ui.label(
+                        egui::RichText::new(&self.status)
+                            .size(11.0)
+                            .color(theme::TEXT_DIM),
+                    );
+                    ui.add_space(2.0);
+                });
             });
     }
 }
