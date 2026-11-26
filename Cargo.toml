@@ -9,7 +9,8 @@ publish = false
 
 # Keep this list short: every crate needs a reason, with default features off.
 [dependencies]
-# GUI. Default features off: OpenGL (glow) instead of wgpu, built-in fonts only.
+# GUI. Default features off: OpenGL (glow) instead of wgpu. Manrope is bundled;
+# the built-in fonts stay available as fallbacks for missing glyphs.
 # x11/wayland only matter on Linux and add nothing to a Windows build.
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
 # Opening images to pick colors from. Default features off: PNG and JPEG only.

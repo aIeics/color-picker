@@ -4,6 +4,8 @@ A lightweight desktop color picker written in Rust. Pick a color from anywhere o
 
 Status: early base. Picking a color from the screen works on Windows; picking from an image is not implemented yet.
 
+The UI uses the bundled Manrope font and the same dark theme as the Clock app (font license in `assets/fonts/Manrope-OFL.txt`).
+
 ## Build
 
 Requires Rust 1.95 or newer.

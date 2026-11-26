@@ -5,6 +5,7 @@
 mod app;
 mod color;
 mod platform;
+mod theme;
 
 use app::ColorPickerApp;
 
@@ -12,8 +13,8 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Color Picker")
-            .with_inner_size([380.0, 500.0])
-            .with_min_inner_size([320.0, 420.0]),
+            .with_inner_size([380.0, 560.0])
+            .with_min_inner_size([320.0, 440.0]),
         ..Default::default()
     };
 
