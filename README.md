@@ -6,7 +6,7 @@ Status: early setup, nothing to use yet.
 
 ## Build
 
-Requires Rust 1.85 or newer.
+Requires Rust 1.95 or newer.
 
 ```sh
 cargo run                 # debug build
