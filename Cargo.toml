@@ -1,0 +1,18 @@
+[package]
+name = "color-picker"
+version = "0.1.0"
+edition = "2024"
+description = "Lightweight desktop color picker: pick colors from the screen or an image."
+repository = "https://github.com/aIeics/color-picker"
+publish = false
+
+# Keep this list short: every crate needs a reason, with default features off.
+[dependencies]
+
+# Small, fast release binary.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
