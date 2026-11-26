@@ -11,17 +11,31 @@ publish = false
 [dependencies]
 # GUI. Default features off: OpenGL (glow) instead of wgpu. Manrope is bundled;
 # the built-in fonts stay available as fallbacks for missing glyphs.
+# `clipboard` makes copy/paste reach the system clipboard (text and pasted images).
 # x11/wayland only matter on Linux and add nothing to a Windows build.
-eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
-# Opening images to pick colors from. Default features off: PNG and JPEG only.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+eframe = { version = "0.37", default-features = false, features = ["clipboard", "default_fonts", "glow", "x11", "wayland"] }
+# Opening images to pick colors from. Default features off: only these formats.
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
+# The native window handle, for the title bar, tray and rounded corners.
+# eframe already builds this crate, so it adds nothing to the binary.
+raw-window-handle = { version = "0.6", default-features = false }
 
-# Windows only: reading screen pixels (GDI) and the cursor position.
+# Windows only: screen pixels (GDI), the pick hotkey and mouse hook, the loupe
+# and tray icon, the Open dialog and rounded window corners.
 # eframe already builds this crate, so it adds little to the build.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", default-features = false, features = [
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_Controls",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
 
