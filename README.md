@@ -35,7 +35,7 @@ Click any value next to the swatch to copy it, for example `rgb(255, 0, 0)` or `
 
 - **Pick hotkey**: click the keyboard icon and press a new shortcut (Esc cancels), or remove it with ×. It needs Ctrl, Alt, Shift or Win, except F1–F24. If another app already uses it, the field says so.
 - **Sample**: pick a single pixel, or the average of 3×3 or 5×5 pixels.
-- **Loupe zoom**, **Copy on pick**, **HEX style** (`#ABCDEF`, `#abcdef`, `ABCDEF` or `abcdef`) and **Show** (which formats appear).
+- **Zoom** (the loupe's), **Copy on pick**, **HEX style** (`#ABCDEF`, `#abcdef`, `ABCDEF` or `abcdef`) and **Show** (which formats appear).
 - **Always on top** and **Remember position**.
 - **Tray**: **Close to tray** (default) keeps the app running in the tray when you close the window, so the hotkey still works. **Minimize to tray** hides the window when you minimize it instead. **Off** removes the tray icon, and closing quits the app. Click the tray icon to show the window; right-click it for **Pick a color** and **Exit**.
 - **Start with Windows** (off by default): the app starts at sign-in, hidden in the tray with the hotkey ready.
