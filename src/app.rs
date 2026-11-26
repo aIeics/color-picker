@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 
-use crate::color::Rgb;
+use crate::color::{Format, HexStyle, Rgb};
 use crate::platform;
 use crate::theme::{self, Kind};
 
@@ -26,7 +26,7 @@ impl ColorPickerApp {
         theme::apply(&cc.egui_ctx);
         Self {
             color: INITIAL_COLOR,
-            hex_input: INITIAL_COLOR.to_hex(),
+            hex_input: HexStyle::default().format(INITIAL_COLOR),
             status: "Ready.".to_owned(),
             pending_pick: None,
         }
@@ -34,7 +34,7 @@ impl ColorPickerApp {
 
     fn set_color(&mut self, color: Rgb) {
         self.color = color;
-        self.hex_input = color.to_hex();
+        self.hex_input = HexStyle::default().format(color);
     }
 
     fn start_pick(&mut self) {
@@ -64,7 +64,7 @@ impl ColorPickerApp {
         match platform::color_at_cursor() {
             Some(color) => {
                 self.set_color(color);
-                self.status = format!("Picked {}.", color.to_hex());
+                self.status = format!("Picked {}.", HexStyle::default().format(color));
             }
             None => self.status = "Could not read the color under the cursor.".to_owned(),
         }
@@ -90,7 +90,7 @@ impl ColorPickerApp {
                 ui.painter().text(
                     rect.center(),
                     egui::Align2::CENTER_CENTER,
-                    self.color.to_hex(),
+                    HexStyle::default().format(self.color),
                     theme::bold(20.0),
                     text_color,
                 );
@@ -153,10 +153,10 @@ impl ColorPickerApp {
                     (ui.available_width() - label_width - button_width - 2.0 * gap).max(80.0);
 
                 // Show only the numbers; copy the full CSS color values.
-                let rgb_values = self.color.to_rgb_values();
-                let hsl_values = self.color.to_hsl_values();
-                let rgb_copy = self.color.to_rgb_string();
-                let hsl_copy = self.color.to_hsl_string();
+                let rgb_values = Format::Rgb.display(self.color, HexStyle::default());
+                let hsl_values = Format::Hsl.display(self.color, HexStyle::default());
+                let rgb_copy = Format::Rgb.copy_text(self.color, HexStyle::default());
+                let hsl_copy = Format::Hsl.copy_text(self.color, HexStyle::default());
 
                 ui.horizontal(|ui| {
                     ui.add_sized(
@@ -178,7 +178,7 @@ impl ColorPickerApp {
                         }
                     }
                     if theme::button_sized(ui, "Copy", Kind::Ghost, button_width).clicked() {
-                        let hex = self.color.to_hex();
+                        let hex = HexStyle::default().format(self.color);
                         ui.ctx().copy_text(hex.clone());
                         self.status = format!("Copied {hex}.");
                     }
