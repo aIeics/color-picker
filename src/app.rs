@@ -12,6 +12,7 @@ use eframe::egui::{
 use crate::action::Action;
 use crate::color::Rgb;
 use crate::history::{self, History};
+use crate::image_pick::{self, ImageTab};
 use crate::palette::{self, Added, Palette};
 use crate::platform::{Command, Event, MainWindow, Service};
 use crate::screen::{self, PickStyle, ScreenPick};
@@ -102,6 +103,7 @@ pub struct ColorPickerApp {
     requested_height: Option<f32>,
     screen: ScreenPick,
     palette_tab: palette::ui::PaletteTab,
+    image: ImageTab,
     /// The platform thread: hotkey and screen picking. `None` where
     /// unsupported or if it failed to start.
     service: Option<Service>,
@@ -138,6 +140,7 @@ impl ColorPickerApp {
                 saved_settings.hotkey,
             ),
             palette_tab: palette::ui::PaletteTab::default(),
+            image: ImageTab::default(),
         }
     }
 
@@ -304,6 +307,48 @@ impl ColorPickerApp {
     }
 }
 
+impl ColorPickerApp {
+    /// Opens dropped image files and pasted images (or pasted paths to
+    /// images) in the Image tab, from any tab.
+    fn handle_drop_and_paste(&mut self, ctx: &egui::Context) {
+        let (dropped, image, text) = ctx.input(|i| {
+            let dropped = i.raw.dropped_files.first().map(|f| f.path().to_path_buf());
+            let mut image = None;
+            let mut text = None;
+            for event in &i.events {
+                match event {
+                    egui::Event::PasteImage(pasted) => image = Some(pasted.clone()),
+                    egui::Event::Paste(pasted) => text = Some(pasted.clone()),
+                    _ => {}
+                }
+            }
+            (dropped, image, text)
+        });
+        // Text pasted into a focused field belongs to that field.
+        let text = text.filter(|_| ctx.memory(|m| m.focused().is_none()));
+
+        if let Some(path) = dropped {
+            self.tab = Tab::Image;
+            self.image.open_path(ctx, path);
+        } else if let Some(image) = image {
+            self.tab = Tab::Image;
+            self.image.paste_handled();
+            self.image.open_pasted(ctx, &image);
+        } else if let Some(path) = text.as_deref().and_then(image_pick::pasted_path) {
+            self.tab = Tab::Image;
+            self.image.paste_handled();
+            self.image.open_path(ctx, path);
+        } else if text.is_some() {
+            if self.image.paste_timed_out() || self.tab == Tab::Image {
+                self.image.paste_handled();
+                self.toast("No image on the clipboard");
+            }
+        } else if self.image.paste_timed_out() {
+            self.toast("No image on the clipboard");
+        }
+    }
+}
+
 /// Brings the window back: visible, not minimized, in front.
 fn show_window(ctx: &egui::Context) {
     ctx.send_viewport_cmd(ViewportCommand::Visible(true));
@@ -318,6 +363,7 @@ impl eframe::App for ColorPickerApp {
         while let Some(event) = self.service.as_ref().and_then(Service::poll) {
             self.handle_event(ctx, event);
         }
+        self.image.poll(ctx);
         self.save_when_settled(ctx);
     }
 
@@ -350,6 +396,8 @@ impl eframe::App for ColorPickerApp {
         if clicked.close {
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
+
+        self.handle_drop_and_paste(&ctx);
 
         let top = bar.bottom() + MARGIN;
         let body_rect = Rect::from_min_max(
@@ -385,7 +433,15 @@ impl eframe::App for ColorPickerApp {
                 &self.settings,
                 &mut actions,
             ),
-            Tab::Image | Tab::Editor | Tab::Settings => {
+            Tab::Image => image_pick::ui::show(
+                &mut body,
+                &mut self.image,
+                self.color,
+                &self.settings,
+                self.window,
+                &mut actions,
+            ),
+            Tab::Editor | Tab::Settings => {
                 let width = body.available_width();
                 widgets::pill(&mut body, width, |p| {
                     let width = p.remaining();
@@ -394,6 +450,18 @@ impl eframe::App for ColorPickerApp {
             }
         }
         let bottom = body.min_rect().bottom();
+
+        // Dragging files over the window: say where they will go.
+        if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
+            painter.rect_filled(full, 0.0, theme::BG.gamma_multiply(0.85));
+            painter.text(
+                full.center(),
+                egui::Align2::CENTER_CENTER,
+                "Drop to open in the Image tab",
+                theme::bold(16.0),
+                theme::TEXT,
+            );
+        }
 
         if self.draw_border {
             painter.rect_stroke(

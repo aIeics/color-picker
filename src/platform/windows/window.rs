@@ -34,6 +34,11 @@ impl MainWindow {
         self.0 as HWND
     }
 
+    /// The handle as a number, for passing to other threads.
+    pub(crate) fn raw(self) -> isize {
+        self.0
+    }
+
     /// Asks Windows 11 for rounded corners and a thin gray border. Returns
     /// `false` where that isn't supported (Windows 10), so the app can draw
     /// its own border instead.

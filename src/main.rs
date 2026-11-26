@@ -7,6 +7,7 @@ mod app;
 mod color;
 mod history;
 mod hotkey;
+mod image_pick;
 mod palette;
 mod platform;
 mod screen;

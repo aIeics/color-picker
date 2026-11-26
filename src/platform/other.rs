@@ -8,6 +8,16 @@ use super::{Command, Event};
 use crate::hotkey::Hotkey;
 use crate::screen::PickStyle;
 
+/// No native Open dialog: answers "cancelled" right away.
+pub fn open_image_dialog(
+    _ctx: &egui::Context,
+    _owner: Option<MainWindow>,
+) -> std::sync::mpsc::Receiver<Option<std::path::PathBuf>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let _ = tx.send(None);
+    rx
+}
+
 pub fn is_first_instance() -> bool {
     true
 }

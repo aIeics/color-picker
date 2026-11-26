@@ -1,11 +1,13 @@
 //! Windows implementation.
 
 mod capture;
+mod dialog;
 mod instance;
 mod loupe;
 mod service;
 mod window;
 
+pub use dialog::open_image_dialog;
 pub use instance::{is_first_instance, wake_first_instance};
 pub use service::Service;
 pub use window::MainWindow;
