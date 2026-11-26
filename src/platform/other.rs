@@ -18,6 +18,20 @@ pub fn open_image_dialog(
     rx
 }
 
+pub const STARTUP_ARG: &str = "--startup";
+
+pub fn autostart_enabled() -> bool {
+    false
+}
+
+pub fn set_autostart(_enabled: bool) -> Result<(), String> {
+    Err("Only available on Windows".to_owned())
+}
+
+pub fn win_key_down() -> bool {
+    false
+}
+
 pub fn is_first_instance() -> bool {
     true
 }

@@ -63,7 +63,7 @@ impl View {
     pub fn pixel_at(self, canvas_point: Vec2, size: [u32; 2]) -> Option<[u32; 2]> {
         let p = self.to_image(canvas_point);
         let inside = p.x >= 0.0 && p.y >= 0.0 && p.x < size[0] as f32 && p.y < size[1] as f32;
-        inside.then(|| [p.x as u32, p.y as u32])
+        inside.then_some([p.x as u32, p.y as u32])
     }
 
     /// Keeps at least `margin` points of the image inside the canvas, so it

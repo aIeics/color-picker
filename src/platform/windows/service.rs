@@ -26,14 +26,15 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetCursorPos,
     GetMessageW, HHOOK, KBDLLHOOKSTRUCT, KillTimer, MSG, MSLLHOOKSTRUCT, PostMessageW,
-    PostQuitMessage, RegisterClassW, SetCursorPos, SetTimer, SetWindowsHookExW, TranslateMessage,
-    UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP, WM_DESTROY, WM_HOTKEY, WM_KEYDOWN,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SYSKEYDOWN, WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW, WS_POPUP,
+    PostQuitMessage, RegisterClassW, RegisterWindowMessageW, SetCursorPos, SetTimer,
+    SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP,
+    WM_DESTROY, WM_HOTKEY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
 use super::capture;
 use super::loupe::Loupe;
+use super::tray::{self, Tray};
 use super::wide;
 use crate::hotkey::Hotkey;
 use crate::platform::{Command, Event};
@@ -54,6 +55,11 @@ const WM_APP_RELEASE: u32 = WM_APP + 7;
 /// Sent by a second instance: show the window.
 pub(super) const WM_APP_SHOW: u32 = WM_APP + 8;
 const WM_APP_QUIT: u32 = WM_APP + 9;
+const WM_APP_TRAY: u32 = WM_APP + 10;
+/// Tray notifications (NOTIFYICON_VERSION_4): left click, keyboard select.
+const NIN_SELECT: u32 = 0x400;
+const NIN_KEYSELECT: u32 = 0x401;
+const WM_CONTEXTMENU: u32 = 0x007B;
 
 const HOTKEY_ID: i32 = 1;
 const TIMER_WATCH: usize = 1;
@@ -138,6 +144,9 @@ struct State {
     active_at: Option<Instant>,
     /// When the pick ended while a button-up still had to be swallowed.
     released_at: Option<Instant>,
+    tray: Option<Tray>,
+    /// Broadcast when Explorer (re)starts; the tray icon must be re-added.
+    taskbar_created: u32,
 }
 
 thread_local! {
@@ -201,6 +210,9 @@ fn run(
             keyboard_hook: null_mut(),
             active_at: None,
             released_at: None,
+            tray: None,
+            // SAFETY: registers (or looks up) a well-known message name.
+            taskbar_created: unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
         });
     });
     with_state(|s| set_hotkey(s, hotkey));
@@ -219,6 +231,7 @@ fn run(
         end_pick(s);
         remove_hooks(s);
         s.loupe = None;
+        s.tray = None;
     });
     STATE.with(|cell| cell.borrow_mut().take());
 }
@@ -280,13 +293,37 @@ unsafe extern "system" fn window_proc(
             with_state(|s| {
                 end_pick(s);
                 remove_hooks(s);
+                s.tray = None;
             });
             // SAFETY: our own window; sends WM_DESTROY, which ends the loop.
             unsafe { DestroyWindow(hwnd) };
         }
+        WM_APP_TRAY => match (lparam as u32) & 0xFFFF {
+            NIN_SELECT | NIN_KEYSELECT => {
+                with_state(|s| emit(s, Event::ShowRequested));
+            }
+            WM_CONTEXTMENU => {
+                // The menu runs a modal loop, so no state is borrowed here.
+                let command = tray::show_menu(hwnd);
+                with_state(|s| match command {
+                    tray::MENU_SHOW => emit(s, Event::ShowRequested),
+                    tray::MENU_PICK => start_pick(s),
+                    tray::MENU_EXIT => emit(s, Event::ExitRequested),
+                    _ => {}
+                });
+            }
+            _ => {}
+        },
         WM_DESTROY => {
             // SAFETY: ends this thread's message loop.
             unsafe { PostQuitMessage(0) };
+        }
+        _ if with_state(|s| s.taskbar_created != 0 && msg == s.taskbar_created) == Some(true) => {
+            with_state(|s| {
+                if let Some(tray) = &s.tray {
+                    tray.readd(WM_APP_TRAY);
+                }
+            });
         }
         // SAFETY: default handling for everything else.
         _ => return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
@@ -312,6 +349,13 @@ fn handle_command(state: &mut State, command: Command) {
         Command::CancelPick => {
             if PICKING.load(Relaxed) {
                 cancel_pick(state);
+            }
+        }
+        Command::SetTray(show) => {
+            if !show {
+                state.tray = None;
+            } else if state.tray.is_none() {
+                state.tray = Tray::add(state.hwnd, WM_APP_TRAY);
             }
         }
     }

@@ -1,5 +1,7 @@
 //! User settings: everything the Settings tab edits. Saved by [`crate::store`].
 
+pub mod ui;
+
 use crate::color::{Format, HexStyle};
 use crate::hotkey::Hotkey;
 

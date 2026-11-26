@@ -24,6 +24,8 @@ pub enum Command {
     SetStyle(PickStyle),
     StartPick,
     CancelPick,
+    /// Show or remove the tray icon.
+    SetTray(bool),
 }
 
 /// What happened on the platform thread.
@@ -36,6 +38,8 @@ pub enum Event {
     PickCancelled,
     /// The mouse wheel changed the loupe zoom during a pick.
     ZoomChanged(u8),
-    /// Another launch of the app asked this one to show itself.
+    /// Show the window: another launch of the app, or the tray icon.
     ShowRequested,
+    /// "Exit" in the tray menu.
+    ExitRequested,
 }

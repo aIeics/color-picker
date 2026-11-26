@@ -1,6 +1,7 @@
 //! The app: custom title bar, tabs, and the state they share. Tabs draw
 //! from read-only state and push [`Action`]s, which are applied here after
-//! drawing.
+//! drawing. Events from the platform thread (hotkey picks, tray clicks) are
+//! handled in `logic`, which also runs while the window is hidden.
 
 use std::time::{Duration, Instant};
 
@@ -15,9 +16,9 @@ use crate::editor::{self, Editor};
 use crate::history::{self, History};
 use crate::image_pick::{self, ImageTab};
 use crate::palette::{self, Added, Palette};
-use crate::platform::{Command, Event, MainWindow, Service};
+use crate::platform::{self, Command, Event, MainWindow, Service};
 use crate::screen::{self, PickStyle, ScreenPick};
-use crate::settings::Settings;
+use crate::settings::{self, Settings, TrayMode};
 use crate::store::{self, Saved};
 use crate::ui::icons::Icon;
 use crate::ui::{details, theme, titlebar, widgets};
@@ -91,59 +92,92 @@ pub struct ColorPickerApp {
     tab: Tab,
     color: Rgb,
     settings: Settings,
+    /// The settings as the window and the platform thread last got them.
+    applied: Settings,
     history: History,
     palette: Palette,
     window_pos: Option<[i32; 2]>,
     window: Option<MainWindow>,
     /// Windows 10 has no rounded corners or border; draw a border there.
     draw_border: bool,
+    /// Whether the app starts with Windows (read from the system).
+    autostart: bool,
+    /// "Exit" was chosen in the tray: let the close through.
+    quitting: bool,
     toast: Option<Toast>,
     /// Unsaved changes, and when they were made.
     dirty_since: Option<Instant>,
     /// The height we asked the window to take, until it has it.
     requested_height: Option<f32>,
     screen: ScreenPick,
-    palette_tab: palette::ui::PaletteTab,
     image: ImageTab,
     editor: Editor,
-    /// The platform thread: hotkey and screen picking. `None` where
+    palette_tab: palette::ui::PaletteTab,
+    settings_tab: settings::ui::SettingsTab,
+    /// The platform thread: hotkey, screen picking and tray. `None` where
     /// unsupported or if it failed to start.
     service: Option<Service>,
 }
 
 impl ColorPickerApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, saved: Saved) -> Self {
-        theme::apply(&cc.egui_ctx);
-        let saved_settings = saved.settings.clone();
+    /// `startup`: launched by Windows at sign-in (the window may be hidden).
+    pub fn new(cc: &eframe::CreationContext<'_>, saved: Saved, startup: bool) -> Self {
+        let ctx = &cc.egui_ctx;
+        theme::apply(ctx);
+        let settings = saved.settings;
+
         let window = MainWindow::from_handle(cc);
         let rounded = window.is_some_and(MainWindow::round_corners);
         if let (Some(window), true, Some(pos)) =
-            (window, saved.settings.remember_position, saved.window_pos)
+            (window, settings.remember_position, saved.window_pos)
         {
             window.move_to(pos);
+        }
+
+        let service = Service::start(
+            ctx.clone(),
+            PickStyle::from_settings(&settings),
+            settings.hotkey,
+        );
+        if let Some(service) = &service {
+            service.send(Command::SetTray(settings.tray != TrayMode::Off));
+        }
+        if startup {
+            if settings.tray == TrayMode::Off {
+                ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+            } else if service.is_none() {
+                // No tray to come back from: never stay invisible.
+                ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+            }
+        }
+
+        let autostart = platform::autostart_enabled();
+        if autostart {
+            // Keeps the entry pointing at this .exe if it was moved.
+            let _ = platform::set_autostart(true);
         }
 
         Self {
             tab: Tab::Screen,
             color: saved.color,
+            applied: settings.clone(),
+            settings,
             history: History::new(saved.history),
             palette: Palette::new(saved.palette),
-            settings: saved.settings,
             window_pos: saved.window_pos,
             window,
             draw_border: !rounded,
+            autostart,
+            quitting: false,
             toast: None,
             dirty_since: None,
             requested_height: None,
             screen: ScreenPick::default(),
-            service: Service::start(
-                cc.egui_ctx.clone(),
-                PickStyle::from_settings(&saved_settings),
-                saved_settings.hotkey,
-            ),
-            palette_tab: palette::ui::PaletteTab::default(),
             image: ImageTab::default(),
             editor: Editor::default(),
+            palette_tab: palette::ui::PaletteTab::default(),
+            settings_tab: settings::ui::SettingsTab::default(),
+            service,
         }
     }
 
@@ -181,6 +215,14 @@ impl ColorPickerApp {
         let _ = store::save(&self.saved());
     }
 
+    fn remember_position(&mut self) {
+        if self.settings.remember_position
+            && let Some(pos) = self.window.and_then(MainWindow::position)
+        {
+            self.window_pos = Some(pos);
+        }
+    }
+
     fn toast(&mut self, text: impl Into<String>) {
         self.toast = Some(Toast {
             text: text.into(),
@@ -214,6 +256,60 @@ impl ColorPickerApp {
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(vec2(WIDTH, height)));
             self.requested_height = Some(height);
         }
+    }
+
+    fn has_tray(&self) -> bool {
+        self.service.is_some() && self.settings.tray != TrayMode::Off
+    }
+
+    fn hide_to_tray(&mut self, ctx: &egui::Context) {
+        self.remember_position();
+        self.save_now();
+        ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+    }
+
+    fn close_clicked(&mut self, ctx: &egui::Context) {
+        if self.has_tray() && self.settings.tray == TrayMode::Close {
+            self.hide_to_tray(ctx);
+        } else {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+    }
+
+    fn minimize_clicked(&mut self, ctx: &egui::Context) {
+        if self.has_tray() && self.settings.tray == TrayMode::Minimize {
+            self.hide_to_tray(ctx);
+        } else {
+            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+        }
+    }
+
+    /// Sends what changed in the settings to the window and the platform
+    /// thread, and saves them.
+    fn apply_settings(&mut self, ctx: &egui::Context) {
+        let (new, old) = (&self.settings, &self.applied);
+        if new.always_on_top != old.always_on_top {
+            let level = if new.always_on_top {
+                WindowLevel::AlwaysOnTop
+            } else {
+                WindowLevel::Normal
+            };
+            ctx.send_viewport_cmd(ViewportCommand::WindowLevel(level));
+        }
+        if let Some(service) = &self.service {
+            if new.hotkey != old.hotkey && !self.settings_tab.recording {
+                service.send(Command::SetHotkey(new.hotkey));
+            }
+            let style = PickStyle::from_settings(new);
+            if style != PickStyle::from_settings(old) {
+                service.send(Command::SetStyle(style));
+            }
+            if (new.tray == TrayMode::Off) != (old.tray == TrayMode::Off) {
+                service.send(Command::SetTray(new.tray != TrayMode::Off));
+            }
+        }
+        self.applied = self.settings.clone();
+        self.mark_dirty();
     }
 
     fn apply(&mut self, ctx: &egui::Context, action: Action) {
@@ -277,21 +373,38 @@ impl ColorPickerApp {
                 self.mark_dirty();
                 self.toast("History cleared");
             }
-            Action::SettingsChanged => {
-                self.mark_dirty();
-                let level = if self.settings.always_on_top {
-                    WindowLevel::AlwaysOnTop
+            Action::SettingsChanged => self.apply_settings(ctx),
+            Action::HotkeyRecording(recording) => {
+                // While recording, the hotkey must not fire, or pressing it
+                // again would start a pick instead of reaching the field.
+                let hotkey = if recording {
+                    None
                 } else {
-                    WindowLevel::Normal
+                    self.settings.hotkey
                 };
-                ctx.send_viewport_cmd(ViewportCommand::WindowLevel(level));
+                if let Some(service) = &self.service {
+                    service.send(Command::SetHotkey(hotkey));
+                }
+                self.applied.hotkey = hotkey;
+                if recording {
+                    self.screen.hotkey_error = None;
+                }
             }
+            Action::SetAutostart(on) => match platform::set_autostart(on) {
+                Ok(()) => {
+                    self.autostart = on;
+                    self.toast(if on {
+                        "Starts with Windows, in the tray"
+                    } else {
+                        "Won't start with Windows"
+                    });
+                }
+                Err(error) => self.toast(error),
+            },
             Action::Toast(text) => self.toast(text),
         }
     }
-}
 
-impl ColorPickerApp {
     fn handle_event(&mut self, ctx: &egui::Context, event: Event) {
         match event {
             Event::HotkeyStatus(error) => self.screen.hotkey_error = error,
@@ -303,14 +416,17 @@ impl ColorPickerApp {
             Event::PickCancelled => self.screen.picking = false,
             Event::ZoomChanged(zoom) => {
                 self.settings.zoom = zoom;
+                self.applied.zoom = zoom;
                 self.mark_dirty();
             }
             Event::ShowRequested => show_window(ctx),
+            Event::ExitRequested => {
+                self.quitting = true;
+                ctx.send_viewport_cmd(ViewportCommand::Close);
+            }
         }
     }
-}
 
-impl ColorPickerApp {
     /// Opens dropped image files and pasted images (or pasted paths to
     /// images) in the Image tab, from any tab.
     fn handle_drop_and_paste(&mut self, ctx: &egui::Context) {
@@ -350,6 +466,47 @@ impl ColorPickerApp {
             self.toast("No image on the clipboard");
         }
     }
+
+    fn body(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        match self.tab {
+            Tab::Screen => screen::show(ui, &self.screen, self.color, &self.settings, actions),
+            Tab::Image => image_pick::ui::show(
+                ui,
+                &mut self.image,
+                self.color,
+                &self.settings,
+                self.window,
+                actions,
+            ),
+            Tab::Editor => {
+                editor::ui::show(ui, &mut self.editor, self.color, &self.settings, actions);
+            }
+            Tab::History => {
+                history::ui::show(ui, &self.history, self.color, &self.settings, actions);
+            }
+            Tab::Palette => palette::ui::show(
+                ui,
+                &mut self.palette_tab,
+                &self.palette,
+                self.color,
+                &self.settings,
+                actions,
+            ),
+            Tab::Settings => {
+                let status = settings::ui::Status {
+                    hotkey_error: self.screen.hotkey_error.as_deref(),
+                    autostart: self.autostart,
+                };
+                settings::ui::show(
+                    ui,
+                    &mut self.settings_tab,
+                    &mut self.settings,
+                    &status,
+                    actions,
+                );
+            }
+        }
+    }
 }
 
 /// Brings the window back: visible, not minimized, in front.
@@ -367,6 +524,16 @@ impl eframe::App for ColorPickerApp {
             self.handle_event(ctx, event);
         }
         self.image.poll(ctx);
+
+        // Alt+F4 or "Close window" on the taskbar: same as the X button.
+        if ctx.input(|i| i.viewport().close_requested())
+            && !self.quitting
+            && self.has_tray()
+            && self.settings.tray == TrayMode::Close
+        {
+            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+            self.hide_to_tray(ctx);
+        }
         self.save_when_settled(ctx);
     }
 
@@ -389,15 +556,19 @@ impl eframe::App for ColorPickerApp {
         if let Some(tab) = clicked.tab {
             self.tab = tab;
         }
+        if self.tab != Tab::Settings && self.settings_tab.recording {
+            self.settings_tab.recording = false;
+            actions.push(Action::HotkeyRecording(false));
+        }
         if clicked.pin {
             self.settings.always_on_top = !self.settings.always_on_top;
             actions.push(Action::SettingsChanged);
         }
         if clicked.minimize {
-            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+            self.minimize_clicked(&ctx);
         }
         if clicked.close {
-            ctx.send_viewport_cmd(ViewportCommand::Close);
+            self.close_clicked(&ctx);
         }
 
         self.handle_drop_and_paste(&ctx);
@@ -413,52 +584,7 @@ impl eframe::App for ColorPickerApp {
                 .layout(Layout::top_down(Align::Min)),
         );
         body.spacing_mut().item_spacing = vec2(widgets::GAP, widgets::GAP);
-        match self.tab {
-            Tab::Screen => screen::show(
-                &mut body,
-                &self.screen,
-                self.color,
-                &self.settings,
-                &mut actions,
-            ),
-            Tab::History => history::ui::show(
-                &mut body,
-                &self.history,
-                self.color,
-                &self.settings,
-                &mut actions,
-            ),
-            Tab::Palette => palette::ui::show(
-                &mut body,
-                &mut self.palette_tab,
-                &self.palette,
-                self.color,
-                &self.settings,
-                &mut actions,
-            ),
-            Tab::Image => image_pick::ui::show(
-                &mut body,
-                &mut self.image,
-                self.color,
-                &self.settings,
-                self.window,
-                &mut actions,
-            ),
-            Tab::Editor => editor::ui::show(
-                &mut body,
-                &mut self.editor,
-                self.color,
-                &self.settings,
-                &mut actions,
-            ),
-            Tab::Settings => {
-                let width = body.available_width();
-                widgets::pill(&mut body, width, |p| {
-                    let width = p.remaining();
-                    p.value("Coming soon", theme::TEXT_DIM, width);
-                });
-            }
-        }
+        self.body(&mut body, &mut actions);
         let bottom = body.min_rect().bottom();
 
         // Dragging files over the window: say where they will go.
@@ -472,7 +598,6 @@ impl eframe::App for ColorPickerApp {
                 theme::TEXT,
             );
         }
-
         if self.draw_border {
             painter.rect_stroke(
                 full,
@@ -494,11 +619,7 @@ impl eframe::App for ColorPickerApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        if self.settings.remember_position
-            && let Some(pos) = self.window.and_then(MainWindow::position)
-        {
-            self.window_pos = Some(pos);
-        }
+        self.remember_position();
         self.save_now();
     }
 }

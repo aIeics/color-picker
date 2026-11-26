@@ -21,6 +21,10 @@ pub enum Action {
     ClearHistory,
     /// Settings were edited: save them and apply what changed.
     SettingsChanged,
+    /// The Settings tab started (`true`) or stopped recording a hotkey.
+    HotkeyRecording(bool),
+    /// Turn starting with Windows on or off.
+    SetAutostart(bool),
     /// Show a short message in the title bar.
     Toast(String),
 }

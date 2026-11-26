@@ -25,6 +25,9 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     let saved = store::load();
+    // Launched by Windows at sign-in: start quietly in the tray.
+    let startup = std::env::args().any(|arg| arg == platform::STARTUP_ARG);
+    let hidden = startup && saved.settings.tray != settings::TrayMode::Off;
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Color Picker")
@@ -32,7 +35,13 @@ fn main() -> eframe::Result {
         .with_inner_size([app::WIDTH, app::initial_height(&saved.settings)])
         .with_resizable(false)
         .with_maximize_button(false)
-        .with_decorations(false);
+        .with_decorations(false)
+        .with_visible(!hidden)
+        .with_icon(egui::IconData {
+            rgba: ui::app_icon::pixels(64),
+            width: 64,
+            height: 64,
+        });
     if saved.settings.always_on_top {
         viewport = viewport.with_always_on_top();
     }
@@ -45,6 +54,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Color Picker",
         options,
-        Box::new(move |cc| Ok(Box::new(app::ColorPickerApp::new(cc, saved)))),
+        Box::new(move |cc| Ok(Box::new(app::ColorPickerApp::new(cc, saved, startup)))),
     )
 }

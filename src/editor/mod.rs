@@ -186,8 +186,10 @@ mod tests {
 
     #[test]
     fn typing_is_not_overwritten() {
-        let mut editor = Editor::default();
-        editor.hex_text = "#12".to_owned();
+        let mut editor = Editor {
+            hex_text: "#12".to_owned(),
+            ..Editor::default()
+        };
         editor.sync(Rgb::new(1, 2, 3), HexStyle::default(), true);
         assert_eq!(editor.hex_text, "#12");
         editor.sync(Rgb::new(1, 2, 3), HexStyle::default(), false);

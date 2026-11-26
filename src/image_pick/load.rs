@@ -16,12 +16,6 @@ pub struct Picture {
     pub pixels: RgbaImage,
 }
 
-impl Picture {
-    pub fn size(&self) -> [u32; 2] {
-        [self.pixels.width(), self.pixels.height()]
-    }
-}
-
 /// Reads and decodes an image file (GIF: its first frame).
 pub fn open(path: &Path) -> Result<Picture, String> {
     let name = path.file_name().map_or_else(
@@ -123,7 +117,7 @@ mod tests {
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
             .unwrap();
         let picture = decode(&png, "a.png".into()).unwrap();
-        assert_eq!(picture.size(), [4, 4]);
+        assert_eq!(picture.pixels.dimensions(), (4, 4));
         assert!(decode(b"not an image", "x.png".into()).is_err());
     }
 
