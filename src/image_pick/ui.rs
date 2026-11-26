@@ -27,7 +27,7 @@ pub fn show(
     tab.poll(&ctx);
     toolbar(ui, tab, settings.hex, window);
 
-    let details_h = details::height(settings.formats.len(), false);
+    let details_h = details::height(settings.formats.len(), 0);
     let width = ui.available_width();
     let height = (ui.available_height() - details_h - widgets::GAP).max(120.0);
     canvas(ui, tab, vec2(width, height), settings, window, actions);

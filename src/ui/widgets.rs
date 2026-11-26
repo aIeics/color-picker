@@ -229,6 +229,90 @@ impl Pill<'_> {
         changed
     }
 
+    /// A slider over a color gradient. `color_at` gives the color for a
+    /// value; `segments` is how finely the gradient is drawn. Dragging or
+    /// clicking sets the value, the mouse wheel nudges it by `step`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn gradient_slider(
+        &mut self,
+        value: &mut f32,
+        range: std::ops::RangeInclusive<f32>,
+        step: f32,
+        width: f32,
+        segments: usize,
+        color_at: impl Fn(f32) -> Color32,
+    ) -> Response {
+        let (rect, mut response) = self
+            .ui
+            .allocate_exact_size(vec2(width, SEG_H), Sense::click_and_drag());
+        let (lo, hi) = (*range.start(), *range.end());
+        let track = Rect::from_min_max(
+            pos2(rect.left() + 10.0, rect.center().y - 4.0),
+            pos2(rect.right() - 10.0, rect.center().y + 4.0),
+        );
+
+        let old = *value;
+        if response.is_pointer_button_down_on()
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            let t = ((pos.x - track.left()) / track.width()).clamp(0.0, 1.0);
+            *value = ((lo + t * (hi - lo)) / step).round() * step;
+        }
+        if response.hovered() {
+            // One step per wheel event, not per smoothed frame.
+            let scroll: f32 = self.ui.input(|i| {
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::MouseWheel { delta, .. } => Some(delta.x + delta.y),
+                        _ => None,
+                    })
+                    .sum()
+            });
+            if scroll != 0.0 {
+                *value = (*value + step * scroll.signum()).clamp(lo, hi);
+            }
+        }
+        if *value != old {
+            response.mark_changed();
+        }
+
+        let painter = self.ui.painter();
+        let segments = segments.max(1);
+        let mut mesh = egui::Mesh::default();
+        for i in 0..=segments {
+            let t = i as f32 / segments as f32;
+            let x = egui::lerp(track.left()..=track.right(), t);
+            let color = color_at(lo + t * (hi - lo));
+            mesh.colored_vertex(pos2(x, track.top()), color);
+            mesh.colored_vertex(pos2(x, track.bottom()), color);
+            if i > 0 {
+                let k = 2 * i as u32;
+                mesh.add_triangle(k - 2, k - 1, k);
+                mesh.add_triangle(k - 1, k, k + 1);
+            }
+        }
+        painter.circle_filled(track.left_center(), 4.0, color_at(lo));
+        painter.circle_filled(track.right_center(), 4.0, color_at(hi));
+        painter.add(egui::Shape::mesh(mesh));
+
+        let t = if hi > lo {
+            (*value - lo) / (hi - lo)
+        } else {
+            0.0
+        };
+        let knob = pos2(
+            egui::lerp(track.left()..=track.right(), t.clamp(0.0, 1.0)),
+            track.center().y,
+        );
+        let hovered = response.hovered() || response.dragged();
+        let radius = if hovered { 8.0 } else { 7.0 };
+        painter.circle_filled(knob, radius + 1.0, Color32::from_black_alpha(160));
+        painter.circle_filled(knob, radius, theme::TEXT);
+        painter.circle_filled(knob, radius - 2.5, color_at(*value));
+        response.on_hover_cursor(CursorIcon::PointingHand)
+    }
+
     /// An on/off switch. Flips `on` when clicked.
     pub fn switch(&mut self, on: &mut bool) -> Response {
         let (rect, mut response) = segment_button(self.ui, 48.0);
@@ -272,13 +356,20 @@ impl Pill<'_> {
     }
 
     /// A frameless single-line text field.
-    pub fn text_edit(&mut self, text: &mut String, hint: &str, width: f32) -> Response {
+    pub fn text_edit(
+        &mut self,
+        id: egui::Id,
+        text: &mut String,
+        hint: &str,
+        width: f32,
+    ) -> Response {
         let (rect, _) = self
             .ui
             .allocate_exact_size(vec2(width, SEG_H), Sense::hover());
         self.ui.put(
             rect,
             egui::TextEdit::singleline(text)
+                .id(id)
                 .frame(egui::Frame::NONE)
                 .font(theme::bold(14.0))
                 .text_color(theme::TEXT)

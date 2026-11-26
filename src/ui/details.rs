@@ -12,13 +12,13 @@ pub const SWATCH_W: f32 = 72.0;
 const PER_ROW: usize = 3;
 const LABEL_W: f32 = 58.0;
 
-/// Draws an extra row of controls above the formats, next to the swatch.
-/// Gets the row's width.
-pub type TopRow<'a> = &'a mut dyn FnMut(&mut Ui, f32, &mut Vec<Action>);
+/// Draws extra rows of controls above the formats, next to the swatch.
+/// Gets the rows' width.
+pub type TopRows<'a> = &'a mut dyn FnMut(&mut Ui, f32, &mut Vec<Action>);
 
-/// Height of [`show`] with `formats` shown and an optional top row.
-pub fn height(formats: usize, top_row: bool) -> f32 {
-    let rows = formats.div_ceil(PER_ROW) + usize::from(top_row);
+/// Height of [`show`] with `formats` shown and `top_rows` extra rows.
+pub fn height(formats: usize, top_rows: usize) -> f32 {
+    let rows = formats.div_ceil(PER_ROW) + top_rows;
     rows as f32 * PILL_H + rows.saturating_sub(1) as f32 * GAP
 }
 
@@ -27,10 +27,10 @@ pub fn show(
     color: Rgb,
     settings: &Settings,
     actions: &mut Vec<Action>,
-    top_row: Option<TopRow<'_>>,
+    top: Option<(usize, TopRows<'_>)>,
 ) {
     let formats: Vec<Format> = settings.formats.iter().collect();
-    let height = height(formats.len(), top_row.is_some());
+    let height = height(formats.len(), top.as_ref().map_or(0, |(rows, _)| *rows));
     let right = ui.available_width() - SWATCH_W - GAP;
 
     ui.horizontal_top(|ui| {
@@ -38,8 +38,8 @@ pub fn show(
         widgets::swatch(ui, vec2(SWATCH_W, height), color, Sense::hover());
         ui.vertical(|ui| {
             ui.set_width(right);
-            if let Some(top_row) = top_row {
-                top_row(ui, right, actions);
+            if let Some((_, top)) = top {
+                top(ui, right, actions);
             }
             let width = widgets::column_width(right, PER_ROW);
             for row in formats.chunks(PER_ROW) {

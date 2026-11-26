@@ -35,7 +35,7 @@ pub fn show(
             }
         });
     };
-    details::show(ui, color, settings, actions, Some(&mut top_row));
+    details::show(ui, color, settings, actions, Some((1, &mut top_row)));
 
     let event = grid::show(
         ui,

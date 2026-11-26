@@ -11,6 +11,7 @@ use eframe::egui::{
 
 use crate::action::Action;
 use crate::color::Rgb;
+use crate::editor::{self, Editor};
 use crate::history::{self, History};
 use crate::image_pick::{self, ImageTab};
 use crate::palette::{self, Added, Palette};
@@ -78,7 +79,7 @@ impl Tab {
 /// Window height for the Screen tab, used before the first frame measures
 /// the real content.
 pub fn initial_height(settings: &Settings) -> f32 {
-    titlebar::HEIGHT + MARGIN + details::height(settings.formats.len(), true) + MARGIN
+    titlebar::HEIGHT + MARGIN + details::height(settings.formats.len(), 1) + MARGIN
 }
 
 struct Toast {
@@ -104,6 +105,7 @@ pub struct ColorPickerApp {
     screen: ScreenPick,
     palette_tab: palette::ui::PaletteTab,
     image: ImageTab,
+    editor: Editor,
     /// The platform thread: hotkey and screen picking. `None` where
     /// unsupported or if it failed to start.
     service: Option<Service>,
@@ -141,6 +143,7 @@ impl ColorPickerApp {
             ),
             palette_tab: palette::ui::PaletteTab::default(),
             image: ImageTab::default(),
+            editor: Editor::default(),
         }
     }
 
@@ -441,7 +444,14 @@ impl eframe::App for ColorPickerApp {
                 self.window,
                 &mut actions,
             ),
-            Tab::Editor | Tab::Settings => {
+            Tab::Editor => editor::ui::show(
+                &mut body,
+                &mut self.editor,
+                self.color,
+                &self.settings,
+                &mut actions,
+            ),
+            Tab::Settings => {
                 let width = body.available_width();
                 widgets::pill(&mut body, width, |p| {
                     let width = p.remaining();

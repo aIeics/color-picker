@@ -5,6 +5,7 @@
 mod action;
 mod app;
 mod color;
+mod editor;
 mod history;
 mod hotkey;
 mod image_pick;
