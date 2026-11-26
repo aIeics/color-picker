@@ -4,7 +4,12 @@
 
 mod app;
 mod color;
+mod history;
+mod hotkey;
+mod palette;
 mod platform;
+mod settings;
+mod store;
 mod theme;
 
 use app::ColorPickerApp;
