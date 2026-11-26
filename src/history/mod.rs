@@ -1,5 +1,7 @@
 //! Recently picked colors, newest first.
 
+pub mod ui;
+
 use crate::color::Rgb;
 
 #[derive(Clone, Debug, Default, PartialEq)]

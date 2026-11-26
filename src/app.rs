@@ -1,253 +1,375 @@
-//! Application state and user interface.
+//! The app: custom title bar, tabs, and the state they share. Tabs draw
+//! from read-only state and push [`Action`]s, which are applied here after
+//! drawing.
 
 use std::time::{Duration, Instant};
 
-use eframe::egui;
+use eframe::egui::{
+    self, Align, Layout, Rect, Stroke, StrokeKind, UiBuilder, ViewportCommand, WindowLevel, pos2,
+    vec2,
+};
 
-use crate::color::{Format, HexStyle, Rgb};
-use crate::platform;
-use crate::theme::{self, Kind};
+use crate::action::Action;
+use crate::color::Rgb;
+use crate::history::{self, History};
+use crate::palette::{self, Added, Palette};
+use crate::platform::MainWindow;
+use crate::screen::{self, ScreenPick};
+use crate::settings::Settings;
+use crate::store::{self, Saved};
+use crate::ui::icons::Icon;
+use crate::ui::{details, theme, titlebar, widgets};
 
-/// How long the user has to move the cursor over the target color after
-/// pressing "Pick from screen".
-const PICK_DELAY: Duration = Duration::from_secs(2);
+/// Fixed window width; the height follows the open tab.
+pub const WIDTH: f32 = 820.0;
+/// Space around the tab content.
+const MARGIN: f32 = 12.0;
+/// The Image tab makes the window this tall to show the image.
+const IMAGE_HEIGHT: f32 = 640.0;
+/// How long a message replaces the title.
+const TOAST_TIME: Duration = Duration::from_millis(1800);
+/// Settings are written at most this often while something keeps changing.
+const SAVE_DELAY: Duration = Duration::from_millis(800);
 
-const INITIAL_COLOR: Rgb = Rgb::new(0x3B, 0x82, 0xF6);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tab {
+    Settings,
+    Screen,
+    Image,
+    Editor,
+    History,
+    Palette,
+}
+
+impl Tab {
+    pub const ALL: [Self; 6] = [
+        Self::Settings,
+        Self::Screen,
+        Self::Image,
+        Self::Editor,
+        Self::History,
+        Self::Palette,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Settings => "Settings",
+            Self::Screen => "Pick from screen",
+            Self::Image => "Pick from image",
+            Self::Editor => "Color editor",
+            Self::History => "History",
+            Self::Palette => "Palette",
+        }
+    }
+
+    pub fn icon(self) -> Icon {
+        match self {
+            Self::Settings => Icon::Settings,
+            Self::Screen => Icon::Crosshair,
+            Self::Image => Icon::Image,
+            Self::Editor => Icon::Sliders,
+            Self::History => Icon::History,
+            Self::Palette => Icon::Palette,
+        }
+    }
+}
+
+/// Window height for the Screen tab, used before the first frame measures
+/// the real content.
+pub fn initial_height(settings: &Settings) -> f32 {
+    titlebar::HEIGHT + MARGIN + details::height(settings.formats.len(), true) + MARGIN
+}
+
+struct Toast {
+    text: String,
+    until: Instant,
+}
 
 pub struct ColorPickerApp {
+    tab: Tab,
     color: Rgb,
-    hex_input: String,
-    status: String,
-    pending_pick: Option<Instant>,
+    settings: Settings,
+    history: History,
+    palette: Palette,
+    window_pos: Option<[i32; 2]>,
+    window: Option<MainWindow>,
+    /// Windows 10 has no rounded corners or border; draw a border there.
+    draw_border: bool,
+    toast: Option<Toast>,
+    /// Unsaved changes, and when they were made.
+    dirty_since: Option<Instant>,
+    /// The height we asked the window to take, until it has it.
+    requested_height: Option<f32>,
+    screen: ScreenPick,
+    palette_tab: palette::ui::PaletteTab,
 }
 
 impl ColorPickerApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, saved: Saved) -> Self {
         theme::apply(&cc.egui_ctx);
+        let window = MainWindow::from_handle(cc);
+        let rounded = window.is_some_and(MainWindow::round_corners);
+        if let (Some(window), true, Some(pos)) =
+            (window, saved.settings.remember_position, saved.window_pos)
+        {
+            window.move_to(pos);
+        }
+
         Self {
-            color: INITIAL_COLOR,
-            hex_input: HexStyle::default().format(INITIAL_COLOR),
-            status: "Ready.".to_owned(),
-            pending_pick: None,
+            tab: Tab::Screen,
+            color: saved.color,
+            history: History::new(saved.history),
+            palette: Palette::new(saved.palette),
+            settings: saved.settings,
+            window_pos: saved.window_pos,
+            window,
+            draw_border: !rounded,
+            toast: None,
+            dirty_since: None,
+            requested_height: None,
+            screen: ScreenPick::default(),
+            palette_tab: palette::ui::PaletteTab::default(),
         }
     }
 
-    fn set_color(&mut self, color: Rgb) {
-        self.color = color;
-        self.hex_input = HexStyle::default().format(color);
+    fn saved(&self) -> Saved {
+        Saved {
+            settings: self.settings.clone(),
+            color: self.color,
+            history: self.history.colors().to_vec(),
+            palette: self.palette.colors().to_vec(),
+            window_pos: self.window_pos,
+        }
     }
 
-    fn start_pick(&mut self) {
-        self.pending_pick = Some(Instant::now() + PICK_DELAY);
-        self.status = "Move the cursor over the color to pick.".to_owned();
+    fn mark_dirty(&mut self) {
+        self.dirty_since.get_or_insert_with(Instant::now);
     }
 
-    fn cancel_pick(&mut self) {
-        self.pending_pick = None;
-        self.status = "Pick cancelled.".to_owned();
-    }
-
-    /// Finishes a pending screen pick once its delay has elapsed. Requests a
-    /// repaint at the deadline so the app stays idle while waiting.
-    fn poll_pick(&mut self, ctx: &egui::Context) {
-        let Some(deadline) = self.pending_pick else {
+    /// Saves once changes have settled for [`SAVE_DELAY`], so dragging a
+    /// slider doesn't write the file every frame.
+    fn save_when_settled(&mut self, ctx: &egui::Context) {
+        let Some(since) = self.dirty_since else {
             return;
         };
-
-        let now = Instant::now();
-        if now < deadline {
-            ctx.request_repaint_after(deadline - now);
-            return;
+        let waited = since.elapsed();
+        if waited >= SAVE_DELAY {
+            self.save_now();
+        } else {
+            ctx.request_repaint_after(SAVE_DELAY - waited);
         }
+    }
 
-        self.pending_pick = None;
-        match platform::color_at_cursor() {
-            Some(color) => {
-                self.set_color(color);
-                self.status = format!("Picked {}.", HexStyle::default().format(color));
+    fn save_now(&mut self) {
+        self.dirty_since = None;
+        // A failed save (read-only folder, full disk) must not stop the app.
+        let _ = store::save(&self.saved());
+    }
+
+    fn toast(&mut self, text: impl Into<String>) {
+        self.toast = Some(Toast {
+            text: text.into(),
+            until: Instant::now() + TOAST_TIME,
+        });
+    }
+
+    /// The message to show instead of the title, if one is still current.
+    fn toast_text(&mut self, ctx: &egui::Context) -> Option<String> {
+        let toast = self.toast.as_ref()?;
+        let left = toast.until.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            self.toast = None;
+            return None;
+        }
+        ctx.request_repaint_after(left);
+        Some(toast.text.clone())
+    }
+
+    /// Resizes the window to `height` points if it isn't that tall yet.
+    fn fit_height(&mut self, ctx: &egui::Context, height: f32) {
+        let height = height.round();
+        let current = ctx.input(|i| i.viewport().inner_rect.map(|r| r.height().round()));
+        if current.is_some_and(|current| (current - height).abs() < 1.0) {
+            if self.requested_height.take().is_some()
+                && let Some(window) = self.window
+            {
+                window.keep_on_screen();
             }
-            None => self.status = "Could not read the color under the cursor.".to_owned(),
+        } else if self.requested_height != Some(height) {
+            ctx.send_viewport_cmd(ViewportCommand::InnerSize(vec2(WIDTH, height)));
+            self.requested_height = Some(height);
         }
     }
 
-    fn swatch(&self, ui: &mut egui::Ui) {
-        theme::section_label(ui, "Preview");
-        theme::card()
-            .inner_margin(egui::Margin::symmetric(10, 6))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                let (rect, _) = ui.allocate_exact_size(
-                    egui::vec2(ui.available_width(), 56.0),
-                    egui::Sense::hover(),
-                );
-                ui.painter().rect_filled(rect, 9.0, self.color);
-
-                let text_color = if self.color.luminance() > 0.5 {
-                    egui::Color32::BLACK
-                } else {
-                    egui::Color32::WHITE
+    fn apply(&mut self, ctx: &egui::Context, action: Action) {
+        match action {
+            Action::SetColor(color) => {
+                self.color = color;
+                self.mark_dirty();
+            }
+            Action::Picked(color) => {
+                self.color = color;
+                self.history.push(color);
+                self.mark_dirty();
+                let hex = self.settings.hex.format(color);
+                match self.settings.copy_on_pick {
+                    Some(format) => {
+                        ctx.copy_text(format.copy_text(color, self.settings.hex));
+                        self.toast(format!("Picked {hex} · copied {}", format.label()));
+                    }
+                    None => self.toast(format!("Picked {hex}")),
+                }
+            }
+            Action::Copy(text) => {
+                ctx.copy_text(text.clone());
+                self.toast(format!("Copied {text}"));
+            }
+            Action::StartScreenPick | Action::CancelScreenPick => {}
+            Action::AddToPalette(color) => {
+                let message = match self.palette.add(color) {
+                    Added::Yes => {
+                        self.mark_dirty();
+                        "Saved to palette"
+                    }
+                    Added::AlreadyThere => "Already in the palette",
+                    Added::Full => "The palette is full",
                 };
-                ui.painter().text(
-                    rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    HexStyle::default().format(self.color),
-                    theme::bold(20.0),
-                    text_color,
-                );
-            });
-    }
-
-    fn pick_controls(&mut self, ui: &mut egui::Ui) {
-        theme::section_label(ui, "Pick");
-        theme::card()
-            .inner_margin(egui::Margin::symmetric(10, 6))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-
-                if !platform::SCREEN_PICKING_SUPPORTED {
-                    ui.label("Picking from the screen is only available on Windows.");
-                    return;
-                }
-
-                let picking = self.pending_pick.is_some();
-                ui.horizontal(|ui| {
-                    let pick = ui
-                        .scope(|ui| {
-                            if picking {
-                                ui.disable();
-                            }
-                            theme::button_sized(ui, "Pick from screen", Kind::Primary, 134.0)
-                        })
-                        .inner;
-                    if !picking && pick.clicked() {
-                        self.start_pick();
-                    }
-                    if picking && theme::button_sized(ui, "Cancel", Kind::Ghost, 76.0).clicked() {
-                        self.cancel_pick();
-                    }
-                });
-
-                if picking {
-                    ui.add_space(3.0);
-                    ui.label(
-                        egui::RichText::new("Move the cursor over the color to pick.")
-                            .size(11.0)
-                            .color(theme::TEXT_DIM),
-                    );
-                }
-            });
-    }
-
-    fn formats(&mut self, ui: &mut egui::Ui) {
-        theme::section_label(ui, "Formats");
-        theme::card()
-            .inner_margin(egui::Margin::symmetric(10, 6))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-
-                let label_width = 48.0;
-                let button_width = 60.0;
-                let row_height = 26.0;
-                let gap = ui.spacing().item_spacing.x;
-                let value_width =
-                    (ui.available_width() - label_width - button_width - 2.0 * gap).max(80.0);
-
-                // Show only the numbers; copy the full CSS color values.
-                let rgb_values = Format::Rgb.display(self.color, HexStyle::default());
-                let hsl_values = Format::Hsl.display(self.color, HexStyle::default());
-                let rgb_copy = Format::Rgb.copy_text(self.color, HexStyle::default());
-                let hsl_copy = Format::Hsl.copy_text(self.color, HexStyle::default());
-
-                ui.horizontal(|ui| {
-                    ui.add_sized(
-                        [label_width, row_height],
-                        egui::Label::new(egui::RichText::new("HEX").color(theme::TEXT_DIM))
-                            .truncate(),
-                    );
-                    let response =
-                        theme::text_field(ui, &mut self.hex_input, "#RRGGBB", value_width);
-                    if response.changed() {
-                        match Rgb::from_hex(&self.hex_input) {
-                            Some(color) => {
-                                self.color = color;
-                                self.status = "Color updated.".to_owned();
-                            }
-                            None => {
-                                self.status = "Type a hex color such as #3B82F6.".to_owned();
-                            }
-                        }
-                    }
-                    if theme::button_sized(ui, "Copy", Kind::Ghost, button_width).clicked() {
-                        let hex = HexStyle::default().format(self.color);
-                        ui.ctx().copy_text(hex.clone());
-                        self.status = format!("Copied {hex}.");
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.add_sized(
-                        [label_width, row_height],
-                        egui::Label::new(egui::RichText::new("RGB").color(theme::TEXT_DIM))
-                            .truncate(),
-                    );
-                    ui.add_sized(
-                        [value_width, row_height],
-                        egui::Label::new(egui::RichText::new(&rgb_values).color(theme::TEXT))
-                            .truncate(),
-                    );
-                    if theme::button_sized(ui, "Copy", Kind::Ghost, button_width).clicked() {
-                        ui.ctx().copy_text(rgb_copy.clone());
-                        self.status = format!("Copied {rgb_copy}.");
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.add_sized(
-                        [label_width, row_height],
-                        egui::Label::new(egui::RichText::new("HSL").color(theme::TEXT_DIM))
-                            .truncate(),
-                    );
-                    ui.add_sized(
-                        [value_width, row_height],
-                        egui::Label::new(egui::RichText::new(&hsl_values).color(theme::TEXT))
-                            .truncate(),
-                    );
-                    if theme::button_sized(ui, "Copy", Kind::Ghost, button_width).clicked() {
-                        ui.ctx().copy_text(hsl_copy.clone());
-                        self.status = format!("Copied {hsl_copy}.");
-                    }
-                });
-            });
+                self.toast(message);
+            }
+            Action::RemoveFromPalette(index) => {
+                self.palette.remove(index);
+                self.mark_dirty();
+            }
+            Action::ClearPalette => {
+                self.palette.clear();
+                self.mark_dirty();
+                self.toast("Palette cleared");
+            }
+            Action::RemoveFromHistory(index) => {
+                self.history.remove(index);
+                self.mark_dirty();
+            }
+            Action::ClearHistory => {
+                self.history.clear();
+                self.mark_dirty();
+                self.toast("History cleared");
+            }
+            Action::SettingsChanged => {
+                self.mark_dirty();
+                let level = if self.settings.always_on_top {
+                    WindowLevel::AlwaysOnTop
+                } else {
+                    WindowLevel::Normal
+                };
+                ctx.send_viewport_cmd(ViewportCommand::WindowLevel(level));
+            }
+            Action::Toast(text) => self.toast(text),
+        }
     }
 }
 
 impl eframe::App for ColorPickerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.poll_pick(ui.ctx());
+        let ctx = ui.ctx().clone();
+        let full = ui.max_rect();
+        let painter = ui.painter().clone();
+        painter.rect_filled(full, 0.0, theme::BG);
+        let mut actions = Vec::new();
 
-        egui::CentralPanel::default()
-            .frame(
-                egui::Frame::NONE
-                    .fill(theme::BG)
-                    .inner_margin(egui::Margin::symmetric(14, 6)),
-            )
-            .show(ui, |ui| {
-                theme::column(ui, theme::MAX_WIDTH, |ui| {
-                    ui.heading("Color Picker");
-                    ui.add_space(3.0);
+        let bar = Rect::from_min_size(full.min, vec2(full.width(), titlebar::HEIGHT));
+        let toast = self.toast_text(&ctx);
+        let clicked = titlebar::show(
+            ui,
+            bar,
+            self.tab,
+            self.settings.always_on_top,
+            toast.as_deref(),
+        );
+        if let Some(tab) = clicked.tab {
+            self.tab = tab;
+        }
+        if clicked.pin {
+            self.settings.always_on_top = !self.settings.always_on_top;
+            actions.push(Action::SettingsChanged);
+        }
+        if clicked.minimize {
+            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+        }
+        if clicked.close {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
 
-                    self.swatch(ui);
-                    ui.add_space(6.0);
-                    self.pick_controls(ui);
-                    ui.add_space(6.0);
-                    self.formats(ui);
-                    ui.add_space(3.0);
-
-                    ui.label(
-                        egui::RichText::new(&self.status)
-                            .size(11.0)
-                            .color(theme::TEXT_DIM),
-                    );
-                    ui.add_space(2.0);
+        let top = bar.bottom() + MARGIN;
+        let body_rect = Rect::from_min_max(
+            pos2(full.left() + MARGIN, top),
+            pos2(full.right() - MARGIN, full.bottom().max(top + 1.0)),
+        );
+        let mut body = ui.new_child(
+            UiBuilder::new()
+                .max_rect(body_rect)
+                .layout(Layout::top_down(Align::Min)),
+        );
+        body.spacing_mut().item_spacing = vec2(widgets::GAP, widgets::GAP);
+        match self.tab {
+            Tab::Screen => screen::show(
+                &mut body,
+                &self.screen,
+                self.color,
+                &self.settings,
+                &mut actions,
+            ),
+            Tab::History => history::ui::show(
+                &mut body,
+                &self.history,
+                self.color,
+                &self.settings,
+                &mut actions,
+            ),
+            Tab::Palette => palette::ui::show(
+                &mut body,
+                &mut self.palette_tab,
+                &self.palette,
+                self.color,
+                &self.settings,
+                &mut actions,
+            ),
+            Tab::Image | Tab::Editor | Tab::Settings => {
+                let width = body.available_width();
+                widgets::pill(&mut body, width, |p| {
+                    let width = p.remaining();
+                    p.value("Coming soon", theme::TEXT_DIM, width);
                 });
-            });
+            }
+        }
+        let bottom = body.min_rect().bottom();
+
+        if self.draw_border {
+            painter.rect_stroke(
+                full,
+                0.0,
+                Stroke::new(1.0, theme::BORDER),
+                StrokeKind::Inside,
+            );
+        }
+
+        let height = match self.tab {
+            Tab::Image => IMAGE_HEIGHT,
+            _ => bottom - full.top() + MARGIN,
+        };
+        self.fit_height(&ctx, height);
+
+        for action in actions {
+            self.apply(&ctx, action);
+        }
+        self.save_when_settled(&ctx);
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if self.settings.remember_position
+            && let Some(pos) = self.window.and_then(MainWindow::position)
+        {
+            self.window_pos = Some(pos);
+        }
+        self.save_now();
     }
 }

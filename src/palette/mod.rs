@@ -1,5 +1,7 @@
 //! Colors the user saved on purpose, in the order they were added.
 
+pub mod ui;
+
 use crate::color::Rgb;
 
 #[derive(Clone, Debug, Default, PartialEq)]

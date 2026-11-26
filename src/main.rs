@@ -2,39 +2,42 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod action;
 mod app;
 mod color;
 mod history;
 mod hotkey;
 mod palette;
 mod platform;
+mod screen;
 mod settings;
 mod store;
-mod theme;
+mod ui;
 
-use app::ColorPickerApp;
-
-/// Fixed window size: a wide rectangle that fits every control without
-/// scrolling or overlapping.
-const WINDOW_SIZE: [f32; 2] = [640.0, 400.0];
+use eframe::egui;
 
 fn main() -> eframe::Result {
+    let saved = store::load();
+
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("Color Picker")
+        .with_app_id("color-picker")
+        .with_inner_size([app::WIDTH, app::initial_height(&saved.settings)])
+        .with_resizable(false)
+        .with_maximize_button(false)
+        .with_decorations(false);
+    if saved.settings.always_on_top {
+        viewport = viewport.with_always_on_top();
+    }
+
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("Color Picker")
-            .with_inner_size(WINDOW_SIZE)
-            .with_min_inner_size(WINDOW_SIZE)
-            .with_max_inner_size(WINDOW_SIZE)
-            .with_resizable(false)
-            .with_minimize_button(true)
-            .with_maximize_button(false)
-            .with_close_button(true),
+        viewport,
+        centered: true,
         ..Default::default()
     };
-
     eframe::run_native(
         "Color Picker",
         options,
-        Box::new(|cc| Ok(Box::new(ColorPickerApp::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(app::ColorPickerApp::new(cc, saved)))),
     )
 }
