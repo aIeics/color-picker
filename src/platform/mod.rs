@@ -3,6 +3,10 @@
 //! Windows. Windows is the real implementation; other systems get stubs so
 //! the app still builds there.
 
+use crate::color::Rgb;
+use crate::hotkey::Hotkey;
+use crate::screen::PickStyle;
+
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
@@ -12,3 +16,26 @@ pub use self::windows::*;
 mod other;
 #[cfg(not(windows))]
 pub use self::other::*;
+
+/// What the app asks the platform thread to do.
+#[derive(Clone, Debug)]
+pub enum Command {
+    SetHotkey(Option<Hotkey>),
+    SetStyle(PickStyle),
+    StartPick,
+    CancelPick,
+}
+
+/// What happened on the platform thread.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Event {
+    /// The hotkey was (re)registered; `Some` explains a failure.
+    HotkeyStatus(Option<String>),
+    PickStarted,
+    Picked(Rgb),
+    PickCancelled,
+    /// The mouse wheel changed the loupe zoom during a pick.
+    ZoomChanged(u8),
+    /// Another launch of the app asked this one to show itself.
+    ShowRequested,
+}

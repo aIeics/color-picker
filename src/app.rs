@@ -13,8 +13,8 @@ use crate::action::Action;
 use crate::color::Rgb;
 use crate::history::{self, History};
 use crate::palette::{self, Added, Palette};
-use crate::platform::MainWindow;
-use crate::screen::{self, ScreenPick};
+use crate::platform::{Command, Event, MainWindow, Service};
+use crate::screen::{self, PickStyle, ScreenPick};
 use crate::settings::Settings;
 use crate::store::{self, Saved};
 use crate::ui::icons::Icon;
@@ -102,11 +102,15 @@ pub struct ColorPickerApp {
     requested_height: Option<f32>,
     screen: ScreenPick,
     palette_tab: palette::ui::PaletteTab,
+    /// The platform thread: hotkey and screen picking. `None` where
+    /// unsupported or if it failed to start.
+    service: Option<Service>,
 }
 
 impl ColorPickerApp {
     pub fn new(cc: &eframe::CreationContext<'_>, saved: Saved) -> Self {
         theme::apply(&cc.egui_ctx);
+        let saved_settings = saved.settings.clone();
         let window = MainWindow::from_handle(cc);
         let rounded = window.is_some_and(MainWindow::round_corners);
         if let (Some(window), true, Some(pos)) =
@@ -128,6 +132,11 @@ impl ColorPickerApp {
             dirty_since: None,
             requested_height: None,
             screen: ScreenPick::default(),
+            service: Service::start(
+                cc.egui_ctx.clone(),
+                PickStyle::from_settings(&saved_settings),
+                saved_settings.hotkey,
+            ),
             palette_tab: palette::ui::PaletteTab::default(),
         }
     }
@@ -224,7 +233,15 @@ impl ColorPickerApp {
                 ctx.copy_text(text.clone());
                 self.toast(format!("Copied {text}"));
             }
-            Action::StartScreenPick | Action::CancelScreenPick => {}
+            Action::StartScreenPick => match &self.service {
+                Some(service) => service.send(Command::StartPick),
+                None => self.toast("Picking from the screen isn't available here"),
+            },
+            Action::CancelScreenPick => {
+                if let Some(service) = &self.service {
+                    service.send(Command::CancelPick);
+                }
+            }
             Action::AddToPalette(color) => {
                 let message = match self.palette.add(color) {
                     Added::Yes => {
@@ -268,7 +285,42 @@ impl ColorPickerApp {
     }
 }
 
+impl ColorPickerApp {
+    fn handle_event(&mut self, ctx: &egui::Context, event: Event) {
+        match event {
+            Event::HotkeyStatus(error) => self.screen.hotkey_error = error,
+            Event::PickStarted => self.screen.picking = true,
+            Event::Picked(color) => {
+                self.screen.picking = false;
+                self.apply(ctx, Action::Picked(color));
+            }
+            Event::PickCancelled => self.screen.picking = false,
+            Event::ZoomChanged(zoom) => {
+                self.settings.zoom = zoom;
+                self.mark_dirty();
+            }
+            Event::ShowRequested => show_window(ctx),
+        }
+    }
+}
+
+/// Brings the window back: visible, not minimized, in front.
+fn show_window(ctx: &egui::Context) {
+    ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+    ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+    ctx.send_viewport_cmd(ViewportCommand::Focus);
+}
+
 impl eframe::App for ColorPickerApp {
+    /// Runs before every frame and also while the window is hidden, so
+    /// hotkey picks and tray clicks work without the window.
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        while let Some(event) = self.service.as_ref().and_then(Service::poll) {
+            self.handle_event(ctx, event);
+        }
+        self.save_when_settled(ctx);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let full = ui.max_rect();
@@ -361,7 +413,6 @@ impl eframe::App for ColorPickerApp {
         for action in actions {
             self.apply(&ctx, action);
         }
-        self.save_when_settled(&ctx);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {

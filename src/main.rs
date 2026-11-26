@@ -17,6 +17,11 @@ mod ui;
 use eframe::egui;
 
 fn main() -> eframe::Result {
+    // Only one copy runs; launching again shows the running window.
+    if !platform::is_first_instance() {
+        platform::wake_first_instance();
+        return Ok(());
+    }
     let saved = store::load();
 
     let mut viewport = egui::ViewportBuilder::default()

@@ -5,10 +5,30 @@
 use eframe::egui::Ui;
 
 use crate::action::Action;
-use crate::color::Rgb;
+use crate::color::{HexStyle, Rgb};
 use crate::settings::Settings;
 use crate::ui::icons::Icon;
 use crate::ui::{details, theme, widgets};
+
+/// How a pick looks and samples: loupe zoom (screen pixels per picked pixel
+/// at 100 % scaling), the side of the averaged square, and the HEX style of
+/// the loupe's label.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PickStyle {
+    pub zoom: u8,
+    pub sample: i32,
+    pub hex: HexStyle,
+}
+
+impl PickStyle {
+    pub fn from_settings(settings: &Settings) -> Self {
+        Self {
+            zoom: settings.zoom,
+            sample: settings.sample.side() as i32,
+            hex: settings.hex,
+        }
+    }
+}
 
 /// State of screen picking, as reported by the platform thread.
 #[derive(Debug, Default)]
