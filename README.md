@@ -6,7 +6,12 @@ The window follows the look of BlurAutoClicker: a compact dark (or light) panel 
 
 ## Download
 
-Get the zip from the latest [release](https://github.com/aIeics/color-picker/releases/latest), unzip it anywhere and run `color-picker.exe`. Nothing is installed; settings are saved under `%APPDATA%\color-picker`. The app isn't code-signed, so Windows SmartScreen may warn the first time: click **More info**, then **Run anyway**.
+From the latest [release](https://github.com/aIeics/color-picker/releases/latest):
+
+- **Installer** (`-setup.exe`): installs Color Picker for your Windows user (no admin rights needed), with a Start Menu shortcut, an optional desktop shortcut and an uninstaller in Settings → Apps. Uninstalling asks whether to also delete your settings.
+- **Portable** (`.zip`): unzip it anywhere and run `color-picker.exe`. Nothing is installed.
+
+Either way, settings are saved under `%APPDATA%\color-picker`. Neither download is code-signed, so Windows SmartScreen may warn the first time: click **More info**, then **Run anyway**.
 
 ## Use
 
