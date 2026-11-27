@@ -2,7 +2,7 @@
 
 A lightweight Windows color picker written in Rust. Pick a color from anywhere on the screen or from an image, edit it, and copy it as HEX, RGB, HSL, HSV, CMYK or OKLCH.
 
-The window is a compact black panel with a custom title bar, in the style of BlurAutoClicker. The tabs on the left of the title bar are Settings, Screen, Image, Editor, History and Palette. Pin keeps the window on top.
+The window follows the look of BlurAutoClicker: a compact dark (or light) panel with a custom title bar and a status bar. The gear on the left of the title bar opens Settings; next to it are the Screen, Image, Editor, History and Palette tabs, each with its own accent color. Pin keeps the window on top.
 
 ## Use
 
@@ -15,7 +15,7 @@ Click **Pick from screen**, or press the hotkey anywhere (**Ctrl + Alt + C** by 
 - **Arrow keys** move the cursor by one pixel (ten with Shift); **Enter** or **Space** picks.
 - The **mouse wheel** changes the loupe zoom.
 
-By default the picked color is copied as HEX (change this under **Copy on pick** in Settings). Every pick goes into History.
+By default the picked color is copied as HEX (change this in Settings → **Copying**). Every pick goes into History.
 
 ### Pick from an image
 
@@ -33,16 +33,32 @@ Click any value next to the swatch to copy it, for example `rgb(255, 0, 0)` or `
 
 ### Settings
 
-- **Pick hotkey**: click the keyboard icon and press a new shortcut (Esc cancels), or remove it with ×. It needs Ctrl, Alt, Shift or Win, except F1–F24. If another app already uses it, the field says so.
-- **Sample**: pick a single pixel, or the average of 3×3 or 5×5 pixels.
-- **Zoom** (the loupe's), **Copy on pick**, **HEX style** (`#ABCDEF`, `#abcdef`, `ABCDEF` or `abcdef`) and **Show** (which formats appear).
-- **Always on top** and **Remember position**.
-- **Tray**: **Close to tray** (default) keeps the app running in the tray when you close the window, so the hotkey still works. **Minimize to tray** hides the window when you minimize it instead. **Off** removes the tray icon, and closing quits the app. Click the tray icon to show the window; right-click it for **Pick a color** and **Exit**.
-- **Start with Windows** (off by default): the app starts at sign-in, hidden in the tray with the hotkey ready.
+The gear opens Settings. Its sections:
+
+- **General**: where the settings file is, and **Reset everything** (click it twice), which puts settings, history and palette back to their defaults.
+- **Picking**
+  - **Pick hotkey**: click the keyboard icon and press a new shortcut (Esc cancels), or remove it with ×. It needs Ctrl, Alt, Shift or Win, except F1–F24. If another app already uses it, the field says so.
+  - **Sample**: pick a single pixel, or the average of 3×3 or 5×5 pixels.
+  - **Loupe zoom**: the starting zoom; the mouse wheel changes it while picking.
+- **Copying**
+  - **Copy automatically** after each pick, in the chosen **Format** (HEX by default).
+  - **HEX style** (`#ABCDEF`, `#abcdef`, `ABCDEF` or `abcdef`) and **Formats shown** next to the swatch.
+- **Appearance**
+  - **Theme**: Dark (default), Light, or System to follow Windows.
+  - **Accent**: a color per tab (default), or one color everywhere. Type it as HEX or take the current color.
+  - **Interface scale**: 75% to 200%. Text, controls and the window grow together.
+  - **Status bar**: messages on the left, the version on the right. When it's off, messages show in the title.
+  - **Background image** behind every tab, with **Image opacity**, and **Panel opacity** for the pills, cards and bars over it.
+  - **Tray and taskbar icon**: Wheel, Pipette or Mono.
+  - **Fancy title**: the title in a script font (Segoe Script).
+- **Window**
+  - **Always on top** (same as the pin) and **Remember position**.
+  - **Tray**: **Close to tray** (default) keeps the app running in the tray when you close the window, so the hotkey still works. **Minimize to tray** hides the window when you minimize it instead. **Off** removes the tray icon, and closing quits the app. Click the tray icon to show the window; right-click it for **Pick a color** and **Exit**.
+  - **Start with Windows** (off by default): the app starts at sign-in, hidden in the tray with the hotkey ready.
 
 Only one copy runs at a time. Starting it again shows the running window.
 
-Settings, the current color, history and palette are saved to `%APPDATA%\color-picker\settings.txt`. Delete that file to reset everything.
+Settings, the current color, history and palette are saved to `%APPDATA%\color-picker\settings.txt`. Deleting that file resets everything too.
 
 ## Build
 
@@ -65,4 +81,11 @@ cargo test
 
 ## Notes
 
-The UI uses the bundled Manrope font (license in `assets/fonts/Manrope-OFL.txt`). The icons are drawn in code. The app targets Windows: screen picking, the tray and the Open dialog use the Windows API. Other systems get stubs for those, which haven't been built or tested.
+The app targets Windows: screen picking, the tray and the Open dialog use the Windows API. Other systems get stubs for those, which haven't been built or tested.
+
+## Credits
+
+- **Design**: the look is based on [BlurAutoClicker](https://github.com/Blur009/Blur-AutoClicker) by Blur009: its dark palette, title bar, pills, toggles and Settings layout. No code was copied; this app is written from scratch in Rust.
+- **Icons**: [Lucide](https://lucide.dev), ISC License (the icons that come from Feather are MIT). They are drawn from their SVG path data; the license is in `assets/icons/LICENSE-lucide.txt`.
+- **Font**: [Roboto Flex](https://fonts.google.com/specimen/Roboto+Flex), bundled, SIL Open Font License 1.1. The license is in `assets/fonts/RobotoFlex-OFL.txt`.
+- **Fancy title**: Segoe Script, which comes with Windows. It is read from the system, not bundled.
