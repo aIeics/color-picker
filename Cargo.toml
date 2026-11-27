@@ -1,6 +1,6 @@
 [package]
 name = "color-picker"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.95" # minimum required by eframe 0.37
 description = "Lightweight desktop color picker: pick colors from the screen or an image."
