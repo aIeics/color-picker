@@ -4,6 +4,10 @@ A lightweight Windows color picker written in Rust. Pick a color from anywhere o
 
 The window follows the look of BlurAutoClicker: a compact dark (or light) panel with a custom title bar and a status bar. The gear on the left of the title bar opens Settings; next to it are the Screen, Image, Editor, History and Palette tabs, each with its own accent color. Pin keeps the window on top.
 
+## Download
+
+Get the zip from the latest [release](https://github.com/aIeics/color-picker/releases/latest), unzip it anywhere and run `color-picker.exe`. Nothing is installed; settings are saved under `%APPDATA%\color-picker`. The app isn't code-signed, so Windows SmartScreen may warn the first time: click **More info**, then **Run anyway**.
+
 ## Use
 
 ### Pick from the screen
@@ -89,3 +93,7 @@ The app targets Windows: screen picking, the tray and the Open dialog use the Wi
 - **Icons**: [Lucide](https://lucide.dev), ISC License (the icons that come from Feather are MIT). They are drawn from their SVG path data; the license is in `assets/icons/LICENSE-lucide.txt`.
 - **Font**: [Roboto Flex](https://fonts.google.com/specimen/Roboto+Flex), bundled, SIL Open Font License 1.1. The license is in `assets/fonts/RobotoFlex-OFL.txt`.
 - **Fancy title**: Segoe Script, which comes with Windows. It is read from the system, not bundled.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The bundled font and the icons keep their own licenses, listed under Credits.
