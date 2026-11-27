@@ -4,7 +4,7 @@
 use eframe::egui::{Align2, CursorIcon, Rect, Sense, Stroke, StrokeKind, Ui, Vec2, vec2};
 
 use super::icons::Icon;
-use super::theme;
+use super::theme::{self, p};
 use super::widgets::{self, paint_pill};
 use crate::color::{HexStyle, Rgb};
 
@@ -44,7 +44,7 @@ pub fn show(
             Align2::CENTER_CENTER,
             empty_text,
             theme::regular(13.0),
-            theme::TEXT_DIM,
+            p().text_dim,
         );
         return None;
     }
@@ -68,14 +68,14 @@ pub fn show(
             ui.painter().rect_stroke(
                 rect.expand(2.5),
                 8.0,
-                Stroke::new(1.5, theme::TEXT),
+                Stroke::new(1.5, p().text),
                 StrokeKind::Middle,
             );
         } else if response.hovered() {
             ui.painter().rect_stroke(
                 rect.expand(2.5),
                 8.0,
-                Stroke::new(1.5, theme::TEXT_DIM),
+                Stroke::new(1.5, p().text_dim),
                 StrokeKind::Middle,
             );
         }

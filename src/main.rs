@@ -35,11 +35,7 @@ fn main() -> eframe::Result {
         .with_resizable(false)
         .with_maximize_button(false)
         .with_decorations(false)
-        .with_icon(egui::IconData {
-            rgba: ui::app_icon::pixels(64),
-            width: 64,
-            height: 64,
-        });
+        .with_icon(app::window_icon(saved.settings.tray_icon));
     if saved.settings.always_on_top {
         viewport = viewport.with_always_on_top();
     }

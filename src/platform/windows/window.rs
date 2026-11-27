@@ -63,6 +63,20 @@ impl MainWindow {
         }
     }
 
+    /// The thin border Windows 11 draws around the window.
+    pub fn set_border_color(self, [r, g, b]: [u8; 3]) {
+        let color = u32::from(r) | (u32::from(g) << 8) | (u32::from(b) << 16);
+        // SAFETY: the value outlives the call and its size is passed.
+        unsafe {
+            DwmSetWindowAttribute(
+                self.hwnd(),
+                DWMWA_BORDER_COLOR as _,
+                (&raw const color).cast::<c_void>(),
+                size_of::<u32>() as u32,
+            );
+        }
+    }
+
     /// Top-left corner in physical pixels.
     pub fn position(self) -> Option<[i32; 2]> {
         let mut rect = RECT {

@@ -6,6 +6,7 @@
 use crate::color::Rgb;
 use crate::hotkey::Hotkey;
 use crate::screen::PickStyle;
+use crate::settings::IconStyle;
 
 #[cfg(windows)]
 mod windows;
@@ -26,6 +27,8 @@ pub enum Command {
     CancelPick,
     /// Show or remove the tray icon.
     SetTray(bool),
+    /// The tray icon's look (applies now, or when the icon is shown).
+    SetTrayIcon(IconStyle),
 }
 
 /// What happened on the platform thread.

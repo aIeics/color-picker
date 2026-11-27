@@ -12,7 +12,9 @@ use crate::color::{Format, HexStyle, Rgb};
 use crate::history::History;
 use crate::hotkey::Hotkey;
 use crate::palette::Palette;
-use crate::settings::{self, FormatSet, SampleSize, Settings, TrayMode};
+use crate::settings::{
+    self, AccentMode, FormatSet, IconStyle, SampleSize, Settings, ThemeMode, TrayMode,
+};
 
 /// The color shown on first start.
 pub const DEFAULT_COLOR: Rgb = Rgb::new(0x3B, 0x82, 0xF6);
@@ -90,15 +92,26 @@ pub fn encode(saved: &Saved) -> String {
         ),
         format!("sample = {}", s.sample.side()),
         format!("zoom = {}", s.zoom),
-        format!(
-            "copy_on_pick = {}",
-            s.copy_on_pick.map_or("off", Format::key)
-        ),
+        format!("copy_on_pick = {}", on_off(s.copy_on_pick)),
+        format!("copy_format = {}", s.copy_format.key()),
         format!("hex = {}", s.hex.key()),
         format!("formats = {}", formats.join(", ")),
         format!("always_on_top = {}", s.always_on_top),
         format!("remember_position = {}", s.remember_position),
         format!("tray = {}", s.tray.key()),
+        format!("theme = {}", s.theme.key()),
+        format!("accent = {}", s.accent.key()),
+        format!(
+            "accent_color = {}",
+            HexStyle::default().format(s.accent_color)
+        ),
+        format!("scale = {}", s.scale),
+        format!("status_bar = {}", on_off(s.status_bar)),
+        format!("background = {}", s.background.as_deref().unwrap_or("")),
+        format!("background_opacity = {}", s.background_opacity),
+        format!("panel_opacity = {}", s.panel_opacity),
+        format!("fancy_title = {}", on_off(s.fancy_title)),
+        format!("tray_icon = {}", s.tray_icon.key()),
         format!("color = {}", HexStyle::default().format(saved.color)),
         format!("history = {}", colors(&saved.history)),
         format!("palette = {}", colors(&saved.palette)),
@@ -141,12 +154,15 @@ pub fn decode(text: &str) -> Saved {
                 }
             }
             "copy_on_pick" => {
-                if value.eq_ignore_ascii_case("off") {
-                    s.copy_on_pick = None;
+                if let Some(on) = parse_bool(value) {
+                    s.copy_on_pick = on;
                 } else if let Some(format) = Format::from_key(value) {
-                    s.copy_on_pick = Some(format);
+                    // Older files: the format itself meant "on".
+                    s.copy_on_pick = true;
+                    s.copy_format = format;
                 }
             }
+            "copy_format" => s.copy_format = Format::from_key(value).unwrap_or(s.copy_format),
             "hex" => s.hex = HexStyle::from_key(value).unwrap_or(s.hex),
             "formats" => {
                 let set: FormatSet = value.split(',').filter_map(Format::from_key).collect();
@@ -159,6 +175,28 @@ pub fn decode(text: &str) -> Saved {
                 s.remember_position = parse_bool(value).unwrap_or(s.remember_position);
             }
             "tray" => s.tray = TrayMode::from_key(value).unwrap_or(s.tray),
+            "theme" => s.theme = ThemeMode::from_key(value).unwrap_or(s.theme),
+            "accent" => s.accent = AccentMode::from_key(value).unwrap_or(s.accent),
+            "accent_color" => s.accent_color = Rgb::from_hex(value).unwrap_or(s.accent_color),
+            "scale" => {
+                if let Ok(scale) = value.parse::<u32>() {
+                    s.scale = settings::nearest_scale(scale.min(1000) as u16);
+                }
+            }
+            "status_bar" => s.status_bar = parse_bool(value).unwrap_or(s.status_bar),
+            "background" => s.background = (!value.is_empty()).then(|| value.to_owned()),
+            "background_opacity" => {
+                if let Ok(v) = value.parse::<u32>() {
+                    s.background_opacity = v.min(100) as u8;
+                }
+            }
+            "panel_opacity" => {
+                if let Ok(v) = value.parse::<u32>() {
+                    s.panel_opacity = v.clamp(u32::from(settings::MIN_PANEL_OPACITY), 100) as u8;
+                }
+            }
+            "fancy_title" => s.fancy_title = parse_bool(value).unwrap_or(s.fancy_title),
+            "tray_icon" => s.tray_icon = IconStyle::from_key(value).unwrap_or(s.tray_icon),
             "color" => saved.color = Rgb::from_hex(value).unwrap_or(saved.color),
             "history" => {
                 saved.history = History::new(parse_colors(value)).colors().to_vec();
@@ -171,6 +209,10 @@ pub fn decode(text: &str) -> Saved {
         }
     }
     saved
+}
+
+fn on_off(on: bool) -> &'static str {
+    if on { "on" } else { "off" }
 }
 
 fn parse_bool(value: &str) -> Option<bool> {
@@ -201,7 +243,8 @@ mod tests {
                 hotkey: Hotkey::parse("Win+Shift+C"),
                 sample: SampleSize::Five,
                 zoom: 12,
-                copy_on_pick: None,
+                copy_on_pick: false,
+                copy_format: Format::Cmyk,
                 hex: HexStyle {
                     uppercase: false,
                     hash: false,
@@ -210,6 +253,16 @@ mod tests {
                 always_on_top: true,
                 remember_position: false,
                 tray: TrayMode::Minimize,
+                theme: ThemeMode::System,
+                accent: AccentMode::Single,
+                accent_color: Rgb::new(0x12, 0x34, 0x56),
+                scale: 125,
+                status_bar: false,
+                background: Some(r"C:\Pictures\a = b.png".to_owned()),
+                background_opacity: 0,
+                panel_opacity: 60,
+                fancy_title: true,
+                tray_icon: IconStyle::Mono,
             },
             color: Rgb::new(1, 2, 3),
             history: vec![Rgb::new(255, 0, 0), Rgb::new(0, 255, 0)],
@@ -268,5 +321,33 @@ mod tests {
         let saved = decode(&format!("history = {many}\npalette = {many}"));
         assert_eq!(saved.history.len(), History::MAX);
         assert_eq!(saved.palette.len(), Palette::MAX);
+    }
+
+    #[test]
+    fn older_copy_on_pick_values() {
+        let saved = decode("copy_on_pick = rgb");
+        assert!(saved.settings.copy_on_pick);
+        assert_eq!(saved.settings.copy_format, Format::Rgb);
+        let saved = decode("copy_on_pick = off");
+        assert!(!saved.settings.copy_on_pick);
+        assert_eq!(saved.settings.copy_format, Format::Hex);
+    }
+
+    #[test]
+    fn appearance_values_are_clamped() {
+        let saved = decode(
+            "scale = 999\npanel_opacity = 5\nbackground_opacity = 300\nbackground =   \n\
+             theme = purple\ntray_icon = ???\naccent_color = nope",
+        );
+        let s = saved.settings;
+        let d = Settings::default();
+        assert_eq!(s.scale, 200);
+        assert_eq!(s.panel_opacity, settings::MIN_PANEL_OPACITY);
+        assert_eq!(s.background_opacity, 100);
+        assert_eq!(s.background, None);
+        assert_eq!(
+            (s.theme, s.tray_icon, s.accent_color),
+            (d.theme, d.tray_icon, d.accent_color)
+        );
     }
 }

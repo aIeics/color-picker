@@ -20,6 +20,8 @@ pub fn open_image_dialog(
 
 pub const STARTUP_ARG: &str = "--startup";
 
+pub fn open_url(_url: &str) {}
+
 pub fn autostart_enabled() -> bool {
     false
 }
@@ -63,6 +65,8 @@ impl MainWindow {
     pub fn keep_on_screen(self) {}
 
     pub fn move_offscreen(self) {}
+
+    pub fn set_border_color(self, _rgb: [u8; 3]) {}
 }
 
 pub struct Service;

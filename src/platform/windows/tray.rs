@@ -7,7 +7,7 @@ use std::ptr::null_mut;
 use windows_sys::Win32::Foundation::{HWND, POINT};
 use windows_sys::Win32::Graphics::Gdi::{CreateBitmap, DeleteObject};
 use windows_sys::Win32::UI::Shell::{
-    NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_SETVERSION,
+    NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
     NOTIFYICON_VERSION_4, NOTIFYICONDATAW, Shell_NotifyIconW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -19,6 +19,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use super::capture;
 use super::wide;
+use crate::settings::IconStyle;
 use crate::ui::app_icon;
 
 const ICON_ID: u32 = 1;
@@ -31,15 +32,18 @@ pub const MENU_EXIT: u32 = 3;
 pub struct Tray {
     hwnd: HWND,
     icon: HICON,
+    callback: u32,
 }
 
 impl Tray {
     /// Adds the icon. Its clicks arrive at `hwnd` as `callback` messages.
-    pub fn add(hwnd: HWND, callback: u32) -> Option<Self> {
-        // SAFETY: plain query.
-        let size = unsafe { GetSystemMetrics(SM_CXSMICON) }.clamp(16, 64);
-        let icon = make_icon(size)?;
-        let tray = Self { hwnd, icon };
+    pub fn add(hwnd: HWND, callback: u32, style: IconStyle) -> Option<Self> {
+        let icon = make_icon(style)?;
+        let tray = Self {
+            hwnd,
+            icon,
+            callback,
+        };
         if !tray.notify(NIM_ADD, callback) {
             return None;
         }
@@ -47,8 +51,18 @@ impl Tray {
     }
 
     /// Adds the icon again after Explorer restarted.
-    pub fn readd(&self, callback: u32) {
-        self.notify(NIM_ADD, callback);
+    pub fn readd(&self) {
+        self.notify(NIM_ADD, self.callback);
+    }
+
+    /// Swaps the icon's picture.
+    pub fn set_style(&mut self, style: IconStyle) {
+        if let Some(icon) = make_icon(style) {
+            let old = std::mem::replace(&mut self.icon, icon);
+            self.notify(NIM_MODIFY, self.callback);
+            // SAFETY: the old icon is no longer used by the tray.
+            unsafe { DestroyIcon(old) };
+        }
     }
 
     fn notify(&self, message: u32, callback: u32) -> bool {
@@ -132,9 +146,11 @@ pub fn show_menu(hwnd: HWND) -> u32 {
     }
 }
 
-/// An HICON from the app icon's pixels.
-fn make_icon(size: i32) -> Option<HICON> {
-    let rgba = app_icon::pixels(size as u32);
+/// An HICON from the app icon's pixels, at the tray's size.
+fn make_icon(style: IconStyle) -> Option<HICON> {
+    // SAFETY: plain query.
+    let size = unsafe { GetSystemMetrics(SM_CXSMICON) }.clamp(16, 64);
+    let rgba = app_icon::pixels(size as u32, style);
     let (dc, color, bits) = capture::dib(size, size)?;
     // SAFETY: `bits` holds size × size 32-bit pixels; the GDI objects are
     // freed once the icon has copied them.

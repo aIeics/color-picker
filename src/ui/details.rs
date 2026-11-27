@@ -10,7 +10,7 @@ use crate::settings::Settings;
 
 pub const SWATCH_W: f32 = 72.0;
 const PER_ROW: usize = 3;
-const LABEL_W: f32 = 58.0;
+const LABEL_W: f32 = 64.0;
 
 /// Draws extra rows of controls above the formats, next to the swatch.
 /// Gets the rows' width.
@@ -61,12 +61,12 @@ fn format_pill(
     settings: &Settings,
     actions: &mut Vec<Action>,
 ) {
-    widgets::pill(ui, width, |p| {
-        p.label(format.label(), LABEL_W);
-        p.divider();
+    widgets::pill(ui, width, |pill| {
+        pill.label(format.label(), LABEL_W);
+        pill.divider();
         let copy = format.copy_text(color, settings.hex);
-        let width = p.remaining();
-        let response = p
+        let width = pill.remaining();
+        let response = pill
             .copy_value(&format.display(color, settings.hex), width)
             .on_hover_text(format!("Copy {copy}"));
         if response.clicked() {

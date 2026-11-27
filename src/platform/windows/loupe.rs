@@ -11,10 +11,10 @@ use std::sync::Once;
 use windows_sys::Win32::Foundation::{HWND, POINT, RECT, SIZE};
 use windows_sys::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, BLENDFUNCTION, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW,
-    DEFAULT_CHARSET, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject,
-    DrawTextW, FW_SEMIBOLD, GdiFlush, GetDC, GetMonitorInfoW, HBITMAP, HDC, HFONT, HGDIOBJ,
-    MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint, OUT_DEFAULT_PRECIS, ReleaseDC,
-    SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
+    DEFAULT_CHARSET, DT_LEFT, DT_NOPREFIX, DT_RIGHT, DT_SINGLELINE, DT_VCENTER, DeleteDC,
+    DeleteObject, DrawTextW, FW_SEMIBOLD, GdiFlush, GetDC, GetMonitorInfoW, HBITMAP, HDC, HFONT,
+    HGDIOBJ, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint, OUT_DEFAULT_PRECIS,
+    ReleaseDC, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
@@ -32,10 +32,31 @@ use crate::screen::PickStyle as Style;
 
 const CLASS: &str = "ColorPickerLoupe";
 
-// Colors as 0x00RRGGBB, matching the app's theme.
-const SURFACE: u32 = 0x11_11_11;
-const BORDER: u32 = 0x3A_3A_3A;
-const SWATCH_BORDER: u32 = 0x50_50_50;
+/// The loupe's colors as 0x00RRGGBB, matching the app's dark or light theme.
+struct Colors {
+    surface: u32,
+    border: u32,
+    swatch_border: u32,
+    /// Text colors as COLORREF (0x00BBGGRR) for GDI.
+    text: u32,
+    dim: u32,
+}
+
+const DARK: Colors = Colors {
+    surface: 0x1A_1A_1A,
+    border: 0x48_48_48,
+    swatch_border: 0x50_50_50,
+    text: 0x00F0_F0F0,
+    dim: 0x0080_8080,
+};
+
+const LIGHT: Colors = Colors {
+    surface: 0xFF_FF_FF,
+    border: 0xA6_A6_A6,
+    swatch_border: 0xC4_C4_C4,
+    text: 0x0000_0000,
+    dim: 0x0070_7070,
+};
 
 pub struct Loupe {
     hwnd: HWND,
@@ -123,8 +144,9 @@ impl Loupe {
         let Some(canvas) = self.canvas.as_mut() else {
             return color;
         };
+        let colors = if style.light { &LIGHT } else { &DARK };
         let pixels = canvas.pixels_mut();
-        pixels.fill(0xFF00_0000 | SURFACE);
+        pixels.fill(0xFF00_0000 | colors.surface);
 
         // Zoomed pixels, with faint grid lines when cells are big enough.
         let grid = cell >= 6;
@@ -160,7 +182,15 @@ impl Loupe {
         let sy = pad + zoom_px + (label_h - sw) / 2;
         let swatch = (u32::from(color.r) << 16) | (u32::from(color.g) << 8) | u32::from(color.b);
         fill(pixels, width, sx, sy, sw, sw, 0xFF00_0000 | swatch);
-        outline(pixels, width, sx, sy, sw, sw, 0xFF00_0000 | SWATCH_BORDER);
+        outline(
+            pixels,
+            width,
+            sx,
+            sy,
+            sw,
+            sw,
+            0xFF00_0000 | colors.swatch_border,
+        );
 
         let mut text_rect = RECT {
             left: sx + sw + px(8.0),
@@ -169,11 +199,12 @@ impl Loupe {
             bottom: height,
         };
         let text = wide(&style.hex.format(color));
+        let zoom = wide(&format!("{}×", style.zoom));
         // SAFETY: the canvas DC and font are valid; the text is NUL-terminated.
         unsafe {
             let old_font = SelectObject(canvas.dc, font);
             SetBkMode(canvas.dc, TRANSPARENT as _);
-            SetTextColor(canvas.dc, 0x00FF_FFFF);
+            SetTextColor(canvas.dc, colors.text);
             DrawTextW(
                 canvas.dc,
                 text.as_ptr(),
@@ -181,11 +212,25 @@ impl Loupe {
                 &mut text_rect,
                 DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX,
             );
+            SetTextColor(canvas.dc, colors.dim);
+            DrawTextW(
+                canvas.dc,
+                zoom.as_ptr(),
+                -1,
+                &mut text_rect,
+                DT_RIGHT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX,
+            );
             SelectObject(canvas.dc, old_font);
             GdiFlush();
         }
 
-        round_corners(canvas.pixels_mut(), width, height, px(10.0) as f32);
+        round_corners(
+            canvas.pixels_mut(),
+            width,
+            height,
+            px(8.0) as f32,
+            colors.border,
+        );
         self.show(cursor, width, height, scale);
         color
     }
@@ -417,7 +462,7 @@ fn outline(pixels: &mut [u32], stride: i32, x: i32, y: i32, w: i32, h: i32, valu
 
 /// Cuts anti-aliased rounded corners, draws a 1-pixel border along them and
 /// premultiplies alpha, as `UpdateLayeredWindow` expects.
-fn round_corners(pixels: &mut [u32], width: i32, height: i32, radius: f32) {
+fn round_corners(pixels: &mut [u32], width: i32, height: i32, radius: f32, border_color: u32) {
     let (w, h) = (width as f32, height as f32);
     for y in 0..height {
         for x in 0..width {
@@ -431,7 +476,7 @@ fn round_corners(pixels: &mut [u32], width: i32, height: i32, radius: f32) {
             // Within about a pixel of the edge: the border color.
             let border = (outside + 1.5).clamp(0.0, 1.0);
             if border > 0.0 {
-                v = mix(v, BORDER, border);
+                v = mix(v, border_color, border);
             }
             let a = (coverage * 255.0).round() as u32;
             pixels[index] = (a << 24) | scale_rgb(v, coverage);

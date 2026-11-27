@@ -5,10 +5,12 @@ use eframe::egui::{Color32, Ui};
 
 use super::{Editor, Mode};
 use crate::action::Action;
+use crate::app::Tab;
 use crate::color::{Hsl, Hsv, Rgb};
 use crate::settings::Settings;
 use crate::ui::icons::Icon;
-use crate::ui::{details, theme, widgets};
+use crate::ui::theme::p;
+use crate::ui::{details, widgets};
 
 /// Width of a slider's letter and of its value.
 const LETTER_W: f32 = 30.0;
@@ -28,28 +30,27 @@ pub fn show(
     let mut rows = |ui: &mut Ui, width: f32, actions: &mut Vec<Action>| {
         let column = widgets::column_width(width, 3);
         ui.horizontal(|ui| {
-            widgets::pill(ui, column, |p| {
-                p.label("HEX", 52.0);
-                p.divider();
-                let width = p.remaining();
-                let response = p.text_edit(hex_id, &mut editor.hex_text, "#RRGGBB", width);
+            widgets::pill(ui, column, |pill| {
+                pill.label("HEX", 52.0);
+                pill.divider();
+                let width = pill.remaining();
+                let response = pill.text_edit(hex_id, &mut editor.hex_text, "#RRGGBB", width);
                 if response.changed()
                     && let Some(typed) = Rgb::from_hex(&editor.hex_text)
                 {
                     actions.push(Action::SetColor(editor.set_rgb(typed)));
                 }
             });
-            widgets::pill(ui, column, |p| {
-                let width = p.remaining() / Mode::ALL.len() as f32;
-                for mode in Mode::ALL {
-                    if p.chip(mode.label(), editor.mode == mode, width).clicked() {
-                        editor.mode = mode;
-                    }
-                }
+            widgets::pill(ui, column, |pill| {
+                let options = Mode::ALL.map(|m| (m, m.label()));
+                let width = widgets::segmented_width(pill.ui, &Mode::ALL.map(Mode::label));
+                pill.space(((pill.remaining() - width) / 2.0).max(0.0));
+                widgets::segmented(pill.ui, &mut editor.mode, &options, Tab::Editor.color());
             });
-            widgets::pill(ui, column, |p| {
-                let width = p.remaining();
-                if p.button(Some(Icon::Plus), "Save to palette", width)
+            widgets::pill(ui, column, |pill| {
+                let width = pill.remaining();
+                if pill
+                    .button(Some(Icon::Plus), "Save to palette", width)
                     .clicked()
                 {
                     actions.push(Action::AddToPalette(color));
@@ -186,13 +187,13 @@ fn slider(
     color_at: impl Fn(f32) -> Color32,
     format: impl Fn(f32) -> String,
 ) -> bool {
-    widgets::pill(ui, width, |p| {
-        p.label(letter, LETTER_W);
-        let track = p.remaining() - VALUE_W;
-        let moved = p
+    widgets::pill(ui, width, |pill| {
+        pill.label(letter, LETTER_W);
+        let track = pill.remaining() - VALUE_W;
+        let moved = pill
             .gradient_slider(value, range, 1.0, track, segments, color_at)
             .changed();
-        p.value(&format(*value), theme::TEXT, VALUE_W);
+        pill.value(&format(*value), p().text, VALUE_W);
         moved
     })
 }

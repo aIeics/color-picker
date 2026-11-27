@@ -17,6 +17,24 @@ pub use instance::{is_first_instance, wake_first_instance};
 pub use service::Service;
 pub use window::MainWindow;
 
+/// Opens a web page, file or folder with the default program.
+pub fn open_url(target: &str) {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let (verb, target) = (wide("open"), wide(target));
+    // SAFETY: NUL-terminated strings; no window or parameters.
+    unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        );
+    }
+}
+
 /// Whether a Windows key is held (egui doesn't report it as a modifier).
 pub fn win_key_down() -> bool {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LWIN, VK_RWIN};

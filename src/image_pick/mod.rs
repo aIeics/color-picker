@@ -32,7 +32,8 @@ pub struct ImageTab {
     loading: Option<(String, Receiver<Result<Picture, String>>)>,
     dialog: Option<Receiver<Option<PathBuf>>>,
     error: Option<String>,
-    checker: Option<TextureHandle>,
+    /// The checkerboard texture and whether it is the light one.
+    checker: Option<(bool, TextureHandle)>,
     /// The hovered pixel and its color, from the last frame.
     hover: Option<([u32; 2], crate::color::Rgb)>,
     /// Canvas size from the last frame, for the zoom buttons.
@@ -189,9 +190,12 @@ fn upload(ctx: &egui::Context, pixels: &RgbaImage) -> TextureHandle {
 }
 
 /// A tiny repeating checkerboard shown behind transparent pixels.
-fn checker_texture(ctx: &egui::Context) -> TextureHandle {
-    let dark = egui::Color32::from_gray(22);
-    let light = egui::Color32::from_gray(34);
+fn checker_texture(ctx: &egui::Context, light_theme: bool) -> TextureHandle {
+    let (dark, light) = if light_theme {
+        (egui::Color32::from_gray(222), egui::Color32::from_gray(246))
+    } else {
+        (egui::Color32::from_gray(22), egui::Color32::from_gray(34))
+    };
     let image = ColorImage::new([2, 2], vec![light, dark, dark, light]);
     ctx.load_texture(
         "checker",

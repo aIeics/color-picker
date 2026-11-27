@@ -39,6 +39,7 @@ use super::wide;
 use crate::hotkey::Hotkey;
 use crate::platform::{Command, Event};
 use crate::screen::PickStyle as Style;
+use crate::settings::IconStyle;
 use crate::settings::ZOOM_LEVELS;
 
 /// Class of the hidden service window; a second instance finds the first
@@ -145,6 +146,7 @@ struct State {
     /// When the pick ended while a button-up still had to be swallowed.
     released_at: Option<Instant>,
     tray: Option<Tray>,
+    tray_style: IconStyle,
     /// Broadcast when Explorer (re)starts; the tray icon must be re-added.
     taskbar_created: u32,
 }
@@ -211,6 +213,7 @@ fn run(
             active_at: None,
             released_at: None,
             tray: None,
+            tray_style: IconStyle::Wheel,
             // SAFETY: registers (or looks up) a well-known message name.
             taskbar_created: unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
         });
@@ -321,7 +324,7 @@ unsafe extern "system" fn window_proc(
         _ if with_state(|s| s.taskbar_created != 0 && msg == s.taskbar_created) == Some(true) => {
             with_state(|s| {
                 if let Some(tray) = &s.tray {
-                    tray.readd(WM_APP_TRAY);
+                    tray.readd();
                 }
             });
         }
@@ -355,7 +358,13 @@ fn handle_command(state: &mut State, command: Command) {
             if !show {
                 state.tray = None;
             } else if state.tray.is_none() {
-                state.tray = Tray::add(state.hwnd, WM_APP_TRAY);
+                state.tray = Tray::add(state.hwnd, WM_APP_TRAY, state.tray_style);
+            }
+        }
+        Command::SetTrayIcon(style) => {
+            state.tray_style = style;
+            if let Some(tray) = &mut state.tray {
+                tray.set_style(style);
             }
         }
     }

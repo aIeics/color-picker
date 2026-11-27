@@ -8,7 +8,8 @@ use crate::color::Rgb;
 use crate::settings::Settings;
 use crate::ui::grid::{self, GridEvent};
 use crate::ui::icons::Icon;
-use crate::ui::{details, theme, widgets};
+use crate::ui::theme::p;
+use crate::ui::{details, widgets};
 
 pub fn show(
     ui: &mut Ui,
@@ -19,15 +20,16 @@ pub fn show(
 ) {
     let count = history.colors().len();
     let mut top_row = |ui: &mut Ui, width: f32, actions: &mut Vec<Action>| {
-        widgets::pill(ui, width, |p| {
-            p.label("History", 76.0);
-            p.divider();
-            let clear_w = widgets::button_width(p.ui, true, "Clear");
+        widgets::pill(ui, width, |pill| {
+            pill.label("History", 76.0);
+            pill.divider();
+            let clear_w = widgets::button_width(pill.ui, true, "Clear");
             let text = format!("{count} of {} recent picks", History::MAX);
-            let width = p.remaining() - clear_w;
-            p.value(&text, theme::TEXT_DIM, width);
+            let width = pill.remaining() - clear_w;
+            pill.value(&text, p().text_dim, width);
             if count > 0
-                && p.button(Some(Icon::Trash), "Clear", clear_w)
+                && pill
+                    .button(Some(Icon::Trash), "Clear", clear_w)
                     .on_hover_text("Remove all recent picks")
                     .clicked()
             {

@@ -5,6 +5,8 @@ pub mod app_icon;
 pub mod details;
 pub mod grid;
 pub mod icons;
+pub mod lucide;
+pub mod svg;
 pub mod theme;
 pub mod titlebar;
 pub mod widgets;

@@ -1,25 +1,25 @@
-//! Line icons drawn with the painter, so no icon font or image files are
-//! needed. Each icon is drawn on a 24×24 grid and scaled to its rect, in the
-//! style of the BlurAutoClicker title bar (2-unit strokes, round ends).
+//! Lucide icons (the set BlurAutoClicker uses), drawn from their SVG path
+//! data on a 24×24 grid. Parsed once, then stroked with round ends and
+//! joins at any size, color and rotation.
 
-use eframe::egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, StrokeKind, Vec2, vec2};
+use std::sync::OnceLock;
+
+use eframe::egui::{Color32, Mesh, Painter, Pos2, Rect, Shape, Stroke, pos2, vec2};
+
+use super::lucide as l;
+use super::svg::{self, Subpath};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
     Settings,
-    Crosshair,
+    Pipette,
     Image,
     Sliders,
     History,
     Palette,
-    Pin,
-    Minimize,
-    Close,
     Copy,
     Keyboard,
     Clear,
-    ChevronLeft,
-    ChevronRight,
     Folder,
     Paste,
     Plus,
@@ -27,197 +27,244 @@ pub enum Icon {
     Fit,
     Trash,
     Check,
+    Crosshair,
+    AppWindow,
+    Sun,
+    Info,
+    ExternalLink,
+    CircleCheck,
+    ImagePlus,
+    Reset,
+    Eye,
+    Hash,
+    PanelBottom,
+}
+
+impl Icon {
+    const ALL: [Self; 27] = [
+        Self::Settings,
+        Self::Pipette,
+        Self::Image,
+        Self::Sliders,
+        Self::History,
+        Self::Palette,
+        Self::Copy,
+        Self::Keyboard,
+        Self::Clear,
+        Self::Folder,
+        Self::Paste,
+        Self::Plus,
+        Self::Minus,
+        Self::Fit,
+        Self::Trash,
+        Self::Check,
+        Self::Crosshair,
+        Self::AppWindow,
+        Self::Sun,
+        Self::Info,
+        Self::ExternalLink,
+        Self::CircleCheck,
+        Self::ImagePlus,
+        Self::Reset,
+        Self::Eye,
+        Self::Hash,
+        Self::PanelBottom,
+    ];
+
+    fn data(self) -> &'static [&'static str] {
+        match self {
+            Self::Settings => l::SETTINGS,
+            Self::Pipette => l::PIPETTE,
+            Self::Image => l::IMAGE,
+            Self::Sliders => l::SLIDERS_HORIZONTAL,
+            Self::History => l::ROTATE_CCW_CLOCK,
+            Self::Palette => l::PALETTE,
+            Self::Copy => l::COPY,
+            Self::Keyboard => l::KEYBOARD,
+            Self::Clear => l::X,
+            Self::Folder => l::FOLDER_OPEN,
+            Self::Paste => l::CLIPBOARD_PASTE,
+            Self::Plus => l::PLUS,
+            Self::Minus => l::MINUS,
+            Self::Fit => l::SCAN,
+            Self::Trash => l::TRASH,
+            Self::Check => l::CHECK,
+            Self::Crosshair => l::CROSSHAIR,
+            Self::AppWindow => l::APP_WINDOW,
+            Self::Sun => l::SUN,
+            Self::Info => l::INFO,
+            Self::ExternalLink => l::EXTERNAL_LINK,
+            Self::CircleCheck => l::CIRCLE_CHECK,
+            Self::ImagePlus => l::IMAGE_PLUS,
+            Self::Reset => l::ROTATE_CCW,
+            Self::Eye => l::EYE,
+            Self::Hash => l::HASH,
+            Self::PanelBottom => l::PANEL_BOTTOM,
+        }
+    }
+
+    /// The icon's polylines on the 24×24 grid, parsed on first use.
+    pub fn geometry(self) -> &'static [Subpath] {
+        static CACHE: [OnceLock<Vec<Subpath>>; 27] = [const { OnceLock::new() }; 27];
+        let index = Self::ALL.iter().position(|&i| i == self).unwrap_or(0);
+        CACHE[index].get_or_init(|| self.data().iter().flat_map(|d| svg::parse(d)).collect())
+    }
 }
 
 /// Paints `icon` centered in `rect`, as large as its shorter side.
 pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
-    let pen = Pen::new(painter, rect, color);
-    match icon {
-        Icon::Settings => {
-            for k in 0..8 {
-                let angle = k as f32 * std::f32::consts::FRAC_PI_4;
-                let dir = vec2(angle.cos(), angle.sin());
-                let inner = Pos2::new(12.0, 12.0) + dir * 6.8;
-                let outer = Pos2::new(12.0, 12.0) + dir * 9.8;
-                pen.thick(inner, outer, 3.4);
-            }
-            pen.circle(12.0, 12.0, 7.0);
-            pen.circle(12.0, 12.0, 2.8);
-        }
-        Icon::Crosshair => {
-            pen.circle(12.0, 12.0, 7.0);
-            pen.line(&[(12.0, 1.5), (12.0, 6.0)]);
-            pen.line(&[(12.0, 18.0), (12.0, 22.5)]);
-            pen.line(&[(1.5, 12.0), (6.0, 12.0)]);
-            pen.line(&[(18.0, 12.0), (22.5, 12.0)]);
-            pen.dot(12.0, 12.0, 1.7);
-        }
-        Icon::Image => {
-            pen.rect(3.0, 4.0, 21.0, 20.0, 2.5);
-            pen.circle(8.5, 9.5, 1.8);
-            pen.line(&[(21.0, 15.5), (16.0, 10.5), (5.5, 20.0)]);
-        }
-        Icon::Sliders => {
-            pen.line(&[(21.0, 5.0), (14.0, 5.0)]);
-            pen.line(&[(10.0, 5.0), (3.0, 5.0)]);
-            pen.line(&[(21.0, 12.0), (12.0, 12.0)]);
-            pen.line(&[(8.0, 12.0), (3.0, 12.0)]);
-            pen.line(&[(21.0, 19.0), (16.0, 19.0)]);
-            pen.line(&[(12.0, 19.0), (3.0, 19.0)]);
-            pen.line(&[(14.0, 2.5), (14.0, 7.5)]);
-            pen.line(&[(8.0, 9.5), (8.0, 14.5)]);
-            pen.line(&[(16.0, 16.5), (16.0, 21.5)]);
-        }
-        Icon::History => {
-            // An arc from 9 o'clock round the bottom and back up to the top
-            // left (screen angles, y down), an arrow head there, clock hands.
-            let arc: Vec<(f32, f32)> = (0..=28)
-                .map(|i| {
-                    let rad = (180.0 - i as f32 * (315.0 / 28.0)).to_radians();
-                    (12.0 + 9.0 * rad.cos(), 12.0 + 9.0 * rad.sin())
-                })
-                .collect();
-            pen.line(&arc);
-            pen.line(&[(3.0, 3.5), (3.0, 8.0), (7.5, 8.0)]);
-            pen.line(&[(12.0, 7.0), (12.0, 12.0), (15.5, 14.0)]);
-        }
-        Icon::Palette => {
-            pen.rect(3.5, 3.5, 10.5, 10.5, 1.8);
-            pen.rect(13.5, 3.5, 20.5, 10.5, 1.8);
-            pen.rect(3.5, 13.5, 10.5, 20.5, 1.8);
-            pen.rect(13.5, 13.5, 20.5, 20.5, 1.8);
-        }
-        Icon::Pin => {
-            pen.line(&[(12.0, 16.0), (12.0, 21.5)]);
-            pen.closed(&[
-                (9.0, 3.5),
-                (15.0, 3.5),
-                (15.0, 10.0),
-                (18.5, 13.5),
-                (18.5, 16.0),
-                (5.5, 16.0),
-                (5.5, 13.5),
-                (9.0, 10.0),
-            ]);
-        }
-        Icon::Minimize | Icon::Minus => pen.line(&[(6.0, 12.0), (18.0, 12.0)]),
-        Icon::Close => {
-            pen.line(&[(6.5, 6.5), (17.5, 17.5)]);
-            pen.line(&[(17.5, 6.5), (6.5, 17.5)]);
-        }
-        Icon::Clear => {
-            pen.line(&[(8.0, 8.0), (16.0, 16.0)]);
-            pen.line(&[(16.0, 8.0), (8.0, 16.0)]);
-        }
-        Icon::Copy => {
-            pen.rect(8.5, 8.5, 20.5, 20.5, 2.0);
-            pen.line(&[
-                (5.0, 15.5),
-                (3.5, 15.5),
-                (3.5, 3.5),
-                (15.5, 3.5),
-                (15.5, 5.0),
-            ]);
-        }
-        Icon::Keyboard => {
-            pen.rect(2.5, 6.0, 21.5, 18.0, 2.0);
-            for x in [6.5, 10.2, 13.8, 17.5] {
-                pen.dot(x, 10.0, 1.0);
-            }
-            pen.line(&[(8.0, 14.0), (16.0, 14.0)]);
-        }
-        Icon::ChevronLeft => pen.line(&[(14.5, 6.5), (9.0, 12.0), (14.5, 17.5)]),
-        Icon::ChevronRight => pen.line(&[(9.5, 6.5), (15.0, 12.0), (9.5, 17.5)]),
-        Icon::Folder => pen.closed(&[
-            (3.0, 6.0),
-            (9.5, 6.0),
-            (11.5, 8.5),
-            (21.0, 8.5),
-            (21.0, 19.0),
-            (3.0, 19.0),
-        ]),
-        Icon::Paste => {
-            pen.rect(5.0, 4.5, 19.0, 21.5, 2.0);
-            pen.rect(9.0, 2.5, 15.0, 6.5, 1.0);
-        }
-        Icon::Plus => {
-            pen.line(&[(12.0, 5.0), (12.0, 19.0)]);
-            pen.line(&[(5.0, 12.0), (19.0, 12.0)]);
-        }
-        Icon::Fit => {
-            pen.line(&[(3.5, 8.5), (3.5, 3.5), (8.5, 3.5)]);
-            pen.line(&[(15.5, 3.5), (20.5, 3.5), (20.5, 8.5)]);
-            pen.line(&[(20.5, 15.5), (20.5, 20.5), (15.5, 20.5)]);
-            pen.line(&[(8.5, 20.5), (3.5, 20.5), (3.5, 15.5)]);
-        }
-        Icon::Trash => {
-            pen.line(&[(3.5, 6.5), (20.5, 6.5)]);
-            pen.line(&[(9.0, 6.5), (9.0, 3.5), (15.0, 3.5), (15.0, 6.5)]);
-            pen.line(&[(5.5, 6.5), (6.5, 21.0), (17.5, 21.0), (18.5, 6.5)]);
-        }
-        Icon::Check => pen.line(&[(5.0, 12.5), (10.0, 17.5), (19.0, 7.0)]),
+    paint_ex(painter, rect, icon, color, 2.0, 0.0);
+}
+
+/// Like [`paint`], with the stroke width in grid units (Lucide uses 2) and a
+/// rotation in radians around the center.
+pub fn paint_ex(painter: &Painter, rect: Rect, icon: Icon, color: Color32, width: f32, angle: f32) {
+    let grid = Grid::new(rect, angle);
+    let stroke = Stroke::new((width * grid.scale).max(1.0), color);
+    for path in icon.geometry() {
+        let points: Vec<Pos2> = path.points.iter().map(|&p| grid.map(p)).collect();
+        stroke_path(painter, points, path.closed, stroke);
     }
 }
 
-/// Draws on the 24×24 grid, scaled into the target rect.
-struct Pen<'a> {
-    painter: &'a Painter,
-    origin: Pos2,
+/// The pin button: Lucide's pin body, filled, and a needle that grows from
+/// nothing to full length as `needle` goes from 0 to 1 (pinned).
+pub fn paint_pin(painter: &Painter, rect: Rect, color: Color32, needle: f32) {
+    static BODY: OnceLock<Vec<Pos2>> = OnceLock::new();
+    let body = BODY.get_or_init(|| {
+        let mut points: Vec<Pos2> = svg::parse(l::PIN_BODY)
+            .into_iter()
+            .flat_map(|p| p.points)
+            .collect();
+        points.dedup_by(|a, b| (*a - *b).length() < 1e-3);
+        if points.len() > 1 && (points[0] - points[points.len() - 1]).length() < 1e-3 {
+            points.pop();
+        }
+        points
+    });
+    let grid = Grid::new(rect, 0.0);
+    let needle = needle.clamp(0.0, 1.0);
+    let drop = vec2(0.0, needle * grid.scale);
+    let mapped: Vec<Pos2> = body.iter().map(|&p| grid.map(p) + drop).collect();
+    let mut mesh = Mesh::default();
+    for &p in &mapped {
+        mesh.colored_vertex(p, color);
+    }
+    for [a, b, c] in svg::triangulate(&mapped) {
+        mesh.add_triangle(a as u32, b as u32, c as u32);
+    }
+    painter.add(Shape::mesh(mesh));
+    if needle > 0.01 {
+        let top = grid.map(pos2(12.0, 17.0)) + drop;
+        let bottom = top + vec2(0.0, 5.0 * grid.scale * needle);
+        let half = grid.scale;
+        painter.rect_filled(
+            Rect::from_min_max(pos2(top.x - half, top.y), pos2(top.x + half, bottom.y)),
+            0.0,
+            color,
+        );
+    }
+}
+
+/// The minimize button: a 10×2 bar.
+pub fn paint_minimize(painter: &Painter, rect: Rect, color: Color32) {
+    painter.rect_filled(
+        Rect::from_center_size(rect.center(), vec2(10.0, 2.0)),
+        0.0,
+        color,
+    );
+}
+
+/// The close button: a 10×10 cross, 2 wide.
+pub fn paint_close(painter: &Painter, rect: Rect, color: Color32) {
+    let c = rect.center();
+    let stroke = Stroke::new(2.0, color);
+    painter.line_segment([c + vec2(-4.5, -4.5), c + vec2(4.5, 4.5)], stroke);
+    painter.line_segment([c + vec2(4.5, -4.5), c + vec2(-4.5, 4.5)], stroke);
+}
+
+/// Maps the 24×24 grid into a rect, with an optional rotation.
+struct Grid {
+    center: Pos2,
     scale: f32,
-    stroke: Stroke,
+    sin: f32,
+    cos: f32,
 }
 
-impl<'a> Pen<'a> {
-    fn new(painter: &'a Painter, rect: Rect, color: Color32) -> Self {
-        let scale = rect.width().min(rect.height()) / 24.0;
+impl Grid {
+    fn new(rect: Rect, angle: f32) -> Self {
+        let (sin, cos) = angle.sin_cos();
         Self {
-            painter,
-            origin: rect.center() - Vec2::splat(12.0 * scale),
-            scale,
-            stroke: Stroke::new((2.0 * scale).max(1.2), color),
+            center: rect.center(),
+            scale: rect.width().min(rect.height()) / 24.0,
+            sin,
+            cos,
         }
     }
 
-    fn p(&self, (x, y): (f32, f32)) -> Pos2 {
-        self.origin + vec2(x, y) * self.scale
+    fn map(&self, p: Pos2) -> Pos2 {
+        let v = (p - pos2(12.0, 12.0)) * self.scale;
+        self.center
+            + vec2(
+                self.cos * v.x - self.sin * v.y,
+                self.sin * v.x + self.cos * v.y,
+            )
     }
+}
 
-    /// An open polyline with round ends.
-    fn line(&self, points: &[(f32, f32)]) {
-        let points: Vec<Pos2> = points.iter().map(|&p| self.p(p)).collect();
-        let cap = self.stroke.width / 2.0;
-        if let (Some(&first), Some(&last)) = (points.first(), points.last()) {
-            self.painter.circle_filled(first, cap, self.stroke.color);
-            self.painter.circle_filled(last, cap, self.stroke.color);
+/// Strokes a polyline with round ends and round sharp corners, like SVG's
+/// round line caps and joins (egui draws mitered joins).
+fn stroke_path(painter: &Painter, points: Vec<Pos2>, closed: bool, stroke: Stroke) {
+    let n = points.len();
+    if n < 2 {
+        return;
+    }
+    let radius = stroke.width / 2.0;
+    for i in 0..n {
+        let end = !closed && (i == 0 || i == n - 1);
+        let sharp = !end && {
+            let prev = points[(i + n - 1) % n];
+            let next = points[(i + 1) % n];
+            let (a, b) = (points[i] - prev, next - points[i]);
+            let (la, lb) = (a.length(), b.length());
+            la > 1e-4 && lb > 1e-4 && a.dot(b) / (la * lb) < 0.75
+        };
+        if end || sharp {
+            painter.circle_filled(points[i], radius, stroke.color);
         }
-        self.painter.add(Shape::line(points, self.stroke));
+    }
+    if closed {
+        painter.add(Shape::closed_line(points, stroke));
+    } else {
+        painter.add(Shape::line(points, stroke));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_icon_parses_inside_the_grid() {
+        for icon in Icon::ALL {
+            let paths = icon.geometry();
+            assert!(!paths.is_empty(), "{icon:?} has no paths");
+            for p in paths.iter().flat_map(|p| &p.points) {
+                assert!(
+                    (-0.5..=24.5).contains(&p.x) && (-0.5..=24.5).contains(&p.y),
+                    "{icon:?} point {p:?} is off the grid"
+                );
+            }
+        }
     }
 
-    fn closed(&self, points: &[(f32, f32)]) {
-        let points = points.iter().map(|&p| self.p(p)).collect();
-        self.painter.add(Shape::closed_line(points, self.stroke));
-    }
-
-    /// A short, wide segment (gear teeth), in grid units.
-    fn thick(&self, from: Pos2, to: Pos2, width: f32) {
-        let stroke = Stroke::new(width * self.scale, self.stroke.color);
-        self.painter
-            .line_segment([self.p((from.x, from.y)), self.p((to.x, to.y))], stroke);
-    }
-
-    fn circle(&self, x: f32, y: f32, r: f32) {
-        self.painter
-            .circle_stroke(self.p((x, y)), r * self.scale, self.stroke);
-    }
-
-    fn dot(&self, x: f32, y: f32, r: f32) {
-        self.painter
-            .circle_filled(self.p((x, y)), r * self.scale, self.stroke.color);
-    }
-
-    fn rect(&self, x0: f32, y0: f32, x1: f32, y1: f32, radius: f32) {
-        let rect = Rect::from_min_max(self.p((x0, y0)), self.p((x1, y1)));
-        self.painter
-            .rect_stroke(rect, radius * self.scale, self.stroke, StrokeKind::Middle);
+    #[test]
+    fn pin_body_triangulates() {
+        let points: Vec<Pos2> = svg::parse(l::PIN_BODY)
+            .into_iter()
+            .flat_map(|p| p.points)
+            .collect();
+        assert!(points.len() > 10);
+        assert!(svg::triangulate(&points).len() >= points.len() / 2);
     }
 }

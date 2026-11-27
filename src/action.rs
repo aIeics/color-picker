@@ -25,6 +25,14 @@ pub enum Action {
     HotkeyRecording(bool),
     /// Turn starting with Windows on or off.
     SetAutostart(bool),
+    /// Open a web page or folder with the system's default program.
+    OpenUrl(String),
+    OpenSettingsFolder,
+    /// Settings, history and palette back to defaults.
+    ResetAll,
+    /// Pick a background image with the Open dialog.
+    ChooseBackground,
+    ClearBackground,
     /// Show a short message in the title bar.
     Toast(String),
 }

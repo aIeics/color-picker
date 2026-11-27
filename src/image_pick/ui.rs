@@ -13,7 +13,8 @@ use crate::color::{HexStyle, Rgb};
 use crate::platform::MainWindow;
 use crate::settings::Settings;
 use crate::ui::icons::{self, Icon};
-use crate::ui::{details, theme, widgets};
+use crate::ui::theme::{self, p};
+use crate::ui::{details, widgets};
 
 pub fn show(
     ui: &mut Ui,
@@ -46,15 +47,17 @@ fn toolbar(ui: &mut Ui, tab: &mut ImageTab, hex: HexStyle, window: Option<MainWi
     let info_w = width - files_w - zoom_w - 2.0 * widgets::GAP;
 
     ui.horizontal(|ui| {
-        widgets::pill(ui, files_w, |p| {
-            if p.button(Some(Icon::Folder), "Open", open_w)
+        widgets::pill(ui, files_w, |pill| {
+            if pill
+                .button(Some(Icon::Folder), "Open", open_w)
                 .on_hover_text("Open an image file")
                 .clicked()
             {
                 tab.browse(&ctx, window);
             }
-            p.divider();
-            if p.button(Some(Icon::Paste), "Paste", paste_w)
+            pill.divider();
+            if pill
+                .button(Some(Icon::Paste), "Paste", paste_w)
                 .on_hover_text("Paste an image (Ctrl+V)")
                 .clicked()
             {
@@ -64,32 +67,34 @@ fn toolbar(ui: &mut Ui, tab: &mut ImageTab, hex: HexStyle, window: Option<MainWi
             }
         });
 
-        widgets::pill(ui, info_w, |p| {
+        widgets::pill(ui, info_w, |pill| {
             let (swatch, text) = info_text(tab, hex);
-            p.space(6.0);
+            pill.space(6.0);
             if let Some(swatch) = swatch {
-                let (rect, _) = p.ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
-                widgets::paint_swatch(p.ui.painter(), rect, swatch, 4.0);
+                let (rect, _) = pill
+                    .ui
+                    .allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
+                widgets::paint_swatch(pill.ui.painter(), rect, swatch, 4.0);
             }
-            let width = p.remaining();
+            let width = pill.remaining();
             let color = if tab.error.is_some() {
-                theme::DANGER
+                p().danger
             } else {
-                theme::LABEL
+                p().label
             };
-            p.value(&text, color, width);
+            pill.value(&text, color, width);
         });
 
-        widgets::pill(ui, zoom_w, |p| {
+        widgets::pill(ui, zoom_w, |pill| {
             let has_image = tab.shown.is_some();
-            p.ui.add_enabled_ui(has_image, |ui| {
-                let mut p = widgets::Pill { ui };
+            pill.ui.add_enabled_ui(has_image, |ui| {
+                let mut pill = widgets::Pill { ui };
                 let center = tab.canvas / 2.0;
-                if p.icon_button(Icon::Minus, "Zoom out").clicked() {
+                if pill.icon_button(Icon::Minus, "Zoom out").clicked() {
                     tab.view = tab.view.zoom_at(center, 0.8);
                     tab.auto_fit = false;
                 }
-                let percent = tab.view.zoom * p.ui.ctx().pixels_per_point() * 100.0;
+                let percent = tab.view.zoom * pill.ui.ctx().pixels_per_point() * 100.0;
                 let text = if !has_image {
                     "–".to_owned()
                 } else if percent < 10.0 {
@@ -97,13 +102,14 @@ fn toolbar(ui: &mut Ui, tab: &mut ImageTab, hex: HexStyle, window: Option<MainWi
                 } else {
                     format!("{percent:.0}%")
                 };
-                p.value(&text, theme::TEXT, 64.0);
-                if p.icon_button(Icon::Plus, "Zoom in").clicked() {
+                pill.value(&text, p().text, 64.0);
+                if pill.icon_button(Icon::Plus, "Zoom in").clicked() {
                     tab.view = tab.view.zoom_at(center, 1.25);
                     tab.auto_fit = false;
                 }
-                p.divider();
-                if p.button(Some(Icon::Fit), "Fit", fit_w)
+                pill.divider();
+                if pill
+                    .button(Some(Icon::Fit), "Fit", fit_w)
                     .on_hover_text("Show the whole image")
                     .clicked()
                 {
@@ -167,20 +173,20 @@ fn canvas(
             )
         };
         let icon = Rect::from_center_size(inner.center() - vec2(0.0, 34.0), Vec2::splat(28.0));
-        icons::paint(&painter, icon, Icon::Image, theme::TEXT_FAINT);
+        icons::paint(&painter, icon, Icon::Image, p().text_dim);
         painter.text(
             inner.center(),
             Align2::CENTER_CENTER,
             line1,
             theme::bold(15.0),
-            theme::LABEL,
+            p().label,
         );
         painter.text(
             inner.center() + vec2(0.0, 24.0),
             Align2::CENTER_CENTER,
             line2,
             theme::regular(12.5),
-            theme::TEXT_DIM,
+            p().text_dim,
         );
         if response.clicked() && tab.loading.is_none() {
             let ctx = ui.ctx().clone();
@@ -213,10 +219,15 @@ fn canvas(
     let view = tab.view;
 
     let image_rect = Rect::from_min_size(inner.min + view.offset, image_size * view.zoom);
+    let light = p().light;
+    if tab.checker.as_ref().is_none_or(|(l, _)| *l != light) {
+        tab.checker = Some((light, checker_texture(ui.ctx(), light)));
+    }
     let checker = tab
         .checker
-        .get_or_insert_with(|| checker_texture(ui.ctx()))
-        .id();
+        .as_ref()
+        .map(|(_, t)| t.id())
+        .unwrap_or_default();
     let visible = image_rect.intersect(inner);
     if visible.is_positive() {
         let uv = Rect::from_min_max(
